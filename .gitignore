@@ -33,3 +33,7 @@
 
 .DS_Store
 build/
+cache/
+POD-Firmware*
+test.py
+__pycache__/
