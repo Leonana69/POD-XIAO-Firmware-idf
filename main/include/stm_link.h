@@ -16,13 +16,11 @@ typedef struct {
     uart_port_t uartPort;
 } StmLink;
 
-void stmLinkInit(StmLink *link);
-void stmLinkSendPacket(StmLink *self, PodtpPacket *packet);
-bool stmLinkSendReliablePacket(StmLink *self, PodtpPacket *packet, int retry);
-bool stmLinkAckQueuePut(StmLink *self, PodtpPacket *packet);
+void stmLinkInit();
+void stmLinkSendPacket(PodtpPacket *packet);
+bool stmLinkSendReliablePacket(PodtpPacket *packet, int retry);
+bool stmLinkAckQueuePut(PodtpPacket *packet);
 void stmLinkRxTask(void *pvParameters);
-
-extern StmLink stmLink;
 
 // extern StmLink *stmLink;
 

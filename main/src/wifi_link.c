@@ -8,6 +8,9 @@
 #include "freertos/event_groups.h"
 #include "link.h"
 
+static WifiLink controlLink;
+static WifiLink streamLink;
+
 // Initialize the PacketBuffer
 void PacketBufferInit(PacketBuffer* buffer) {
     buffer->head = 0;
@@ -125,7 +128,7 @@ typedef enum {
     PODTP_STATE_RAW_DATA
 } WifiLinkState;
 
-bool wifiParsePacket(WifiLink *self, uint8_t byte) {
+static bool wifiParsePacket(uint8_t byte) {
     static WifiLinkState state = PODTP_STATE_START_1;
     static uint8_t length = 0;
 
@@ -143,13 +146,13 @@ bool wifiParsePacket(WifiLink *self, uint8_t byte) {
             if (length > PODTP_MAX_DATA_LEN || length == 0) {
                 state = PODTP_STATE_START_1;
             } else {
-                self->rx_packet.length = 0;
+                controlLink.rx_packet.length = 0;
                 state = PODTP_STATE_RAW_DATA;
             }
             break;
         case PODTP_STATE_RAW_DATA:
-            self->rx_packet.raw[self->rx_packet.length++] = byte;
-            if (self->rx_packet.length >= length) {
+            controlLink.rx_packet.raw[controlLink.rx_packet.length++] = byte;
+            if (controlLink.rx_packet.length >= length) {
                 state = PODTP_STATE_START_1;
                 return true;
             }
@@ -162,33 +165,45 @@ bool wifiParsePacket(WifiLink *self, uint8_t byte) {
     return false;
 }
 
-void wifiLinkSendPacket(WifiLink* self, PodtpPacket *packet) {
-    static uint8_t buffer[PODTP_MAX_DATA_LEN + 4] = { PODTP_START_BYTE_1, PODTP_START_BYTE_2, 0 };
-    PacketBufferPush(&self->tx_buffer, packet);
-    if (!self->connected) {
-        return;
-    }
-
-    while (!PacketBufferEmpty(&self->tx_buffer)) {
-        PodtpPacket *p = PacketBufferPop(&self->tx_buffer);
-        buffer[2] = p->length;
-        for (uint8_t i = 0; i < p->length; i++) {
-            buffer[i + 3] = p->raw[i];
-        }
-        wifiLinkSendData(self, buffer, p->length + 3);
-    }
-}
-
-void wifiLinkSendData(WifiLink* self, uint8_t *data, uint32_t length) {
+static void wifiLinkSendData(WifiLink *self, uint8_t *data, uint32_t length) {
     if (!self->connected) {
         return;
     }
     send(self->client_socket, data, length, 0);
 }
 
-WifiLink wifiLink;
+void wifiLinkSendPacket(PodtpPacket *packet) {
+    static uint8_t buffer[PODTP_MAX_DATA_LEN + 4] = { PODTP_START_BYTE_1, PODTP_START_BYTE_2, 0 };
+    PacketBufferPush(&controlLink.tx_buffer, packet);
+    if (!controlLink.connected) {
+        return;
+    }
+
+    while (!PacketBufferEmpty(&controlLink.tx_buffer)) {
+        PodtpPacket *p = PacketBufferPop(&controlLink.tx_buffer);
+        buffer[2] = p->length;
+        for (uint8_t i = 0; i < p->length; i++) {
+            buffer[i + 3] = p->raw[i];
+        }
+        wifiLinkSendData(&controlLink, buffer, p->length + 3);
+    }
+}
+
+void wifiLinkSendImage(uint8_t *data, uint32_t length) {
+    if (!streamLink.connected) {
+        int client_sock = accept(streamLink.socket, (struct sockaddr *)&(streamLink.client_addr), &(streamLink.client_addr_len));
+        if (client_sock < 0) {
+            printf("Accept failed\n");
+            return;
+        }
+        streamLink.connected = true;
+        streamLink.client_socket = client_sock;
+    }
+    wifiLinkSendData(&streamLink, data, length);
+}
+
 void wifiLinkRxTask(void* pvParameters) {
-    WifiLink* self = (WifiLink*)pvParameters;
+    WifiLink *self = (WifiLink *)pvParameters;
     char rx_buffer[128];
 
     while (true) {
@@ -213,7 +228,7 @@ void wifiLinkRxTask(void* pvParameters) {
                 break;
             } else {
                 for (int i = 0; i < len; i++) {
-                    if (wifiParsePacket(self, rx_buffer[i])) {
+                    if (wifiParsePacket(rx_buffer[i])) {
                         linkProcessPacket(&self->rx_packet);
                     }
                 }
@@ -223,14 +238,11 @@ void wifiLinkRxTask(void* pvParameters) {
     }
 }
 
-void wifiLinkInit(WifiLink* self, uint16_t port) {
-    // Initialize NVS, Wi-Fi, connect to the AP, etc.
-    // Omitted for brevity - refer to Wi-Fi setup instructions in ESP-IDF documentation
-    // Create a socket
+bool tcpLinkInit(WifiLink *self, uint16_t port) {
     self->socket = socket(AF_INET, SOCK_STREAM, 0);
     if (self->socket < 0) {
         printf("Cannot open socket");
-        return;
+        return false;
     }
 
     // Bind the socket to the port
@@ -243,16 +255,27 @@ void wifiLinkInit(WifiLink* self, uint16_t port) {
     if (bind(self->socket, (struct sockaddr *)&server_addr, sizeof(server_addr)) < 0) {
         printf("Socket bind failed");
         close(self->socket);
-        return;
+        return false;
     }
 
     // Listen for incoming connections
     if (listen(self->socket, 1) < 0) {
         printf("Socket listen failed");
         close(self->socket);
-        return;
+        return false;
+    }
+    return true;
+}
+
+void wifiLinkInit() {
+    if (tcpLinkInit(&controlLink, 80)) {
+        // Create the Rx task
+        xTaskCreatePinnedToCore(wifiLinkRxTask, "control_link_rx_task", 4096, &controlLink, 5, &controlLink.rx_task_handle, 1);
+    } else {
+        printf("Create Control TCP [FAILED]\n");
     }
 
-    // Create the Rx task
-    xTaskCreate(wifiLinkRxTask, "wifi_link_rx_task", 4096, (void*)self, 5, &(self->rx_task_handle));
+    if (!tcpLinkInit(&streamLink, 81)) {
+        printf("Create Stream TCP [FAILED]\n");
+    }
 }

@@ -37,10 +37,9 @@ typedef struct {
     // Add other members as needed
 } WifiLink;
 
-extern WifiLink wifiLink;
 void wifiInit(uint8_t configIndex);
-void wifiLinkInit(WifiLink* link, uint16_t port);
-void wifiLinkSendPacket(WifiLink* self, PodtpPacket *packet);
-void wifiLinkSendData(WifiLink* self, uint8_t *data, uint32_t length);
+void wifiLinkInit();
+void wifiLinkSendPacket(PodtpPacket *packet);
+void wifiLinkSendImage(uint8_t *data, uint32_t length);
 
 #endif // __WIFI_LINK_H__

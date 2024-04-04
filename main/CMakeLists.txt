@@ -5,4 +5,5 @@ idf_component_register(
          "src/wifi_link.c"
          "src/stm_link.c"
          "src/link.c"
+         "src/camera_server.c"
     INCLUDE_DIRS "include")

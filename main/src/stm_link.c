@@ -4,21 +4,20 @@
 #include "link.h"
 #include "driver/gpio.h"
 
-StmLink stmLink;
+static StmLink stmLink;
 
 #define UART_RX_BUFFER_LENGTH 256
-bool stmLinkUartParsePacket(StmLink *self, uint8_t byte);
+bool stmLinkUartParsePacket(uint8_t byte);
 void stmLinkRxTask(void *pvParameters) {
-    StmLink *self = (StmLink *)pvParameters;
     size_t length;
     uint8_t buffer[UART_RX_BUFFER_LENGTH];
     while (true) {
-        uart_get_buffered_data_len(self->uartPort, &length);
+        uart_get_buffered_data_len(stmLink.uartPort, &length);
         if (length > 0) {
-            int len = uart_read_bytes(self->uartPort, buffer, UART_RX_BUFFER_LENGTH, 1);
+            int len = uart_read_bytes(stmLink.uartPort, buffer, UART_RX_BUFFER_LENGTH, 1);
             for (int i = 0; i < len; i++) {
-                if (stmLinkUartParsePacket(self, buffer[i])) {
-                    linkProcessPacket(&self->packetBufferRx);
+                if (stmLinkUartParsePacket(buffer[i])) {
+                    linkProcessPacket(&stmLink.packetBufferRx);
                 }
             }
         }
@@ -26,10 +25,10 @@ void stmLinkRxTask(void *pvParameters) {
     }
 }
 
-void stmLinkInit(StmLink *self) {
-    self->ackQueue = xQueueCreate(3, sizeof(PodtpPacket));
-    self->waitForAck = false;
-    self->rxTaskHandle = NULL;
+void stmLinkInit() {
+    stmLink.ackQueue = xQueueCreate(3, sizeof(PodtpPacket));
+    stmLink.waitForAck = false;
+    stmLink.rxTaskHandle = NULL;
     uart_config_t uart_config = {
         .baud_rate = 1000000,
         .data_bits = UART_DATA_8_BITS,
@@ -41,11 +40,11 @@ void stmLinkInit(StmLink *self) {
     uart_param_config(UART_NUM_0, &uart_config);
     uart_driver_install(UART_NUM_0, UART_RX_BUFFER_LENGTH, 0, 0, NULL, 0);
     uart_set_pin(UART_NUM_0, STM_TX_PIN, STM_RX_PIN, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE);
-    self->uartPort = UART_NUM_0;
-    xTaskCreate(stmLinkRxTask, "stmLinkRxTask", 2048, self, 10, &self->rxTaskHandle);
+    stmLink.uartPort = UART_NUM_0;
+    xTaskCreatePinnedToCore(stmLinkRxTask, "stmLinkRxTask", 2048, NULL, 10, &stmLink.rxTaskHandle, 1);
 }
 
-void stmLinkSendPacket(StmLink *self, PodtpPacket *packet) {
+void stmLinkSendPacket(PodtpPacket *packet) {
     static uint8_t buffer[PODTP_MAX_DATA_LEN + 9] = { PODTP_START_BYTE_1, PODTP_START_BYTE_2, 0 };
     uint8_t check_sum[2] = { 0 };
     check_sum[0] = check_sum[1] = packet->length;
@@ -59,33 +58,33 @@ void stmLinkSendPacket(StmLink *self, PodtpPacket *packet) {
     buffer[packet->length + 4] = check_sum[1];
     // add tail to reset the state machine
     *(uint32_t *) &buffer[packet->length + 5] = 0x0A0D0A0D;
-    uart_write_bytes(self->uartPort, (const char *)buffer, packet->length + 9);
+    uart_write_bytes(stmLink.uartPort, (const char *)buffer, packet->length + 9);
 }
 
-bool stmLinkAckQueuePut(StmLink *self, PodtpPacket *packet) {
+bool stmLinkAckQueuePut(PodtpPacket *packet) {
     bool ret = false;
-    if (self->waitForAck) {
-        xQueueSend(self->ackQueue, packet, 0);
+    if (stmLink.waitForAck) {
+        xQueueSend(stmLink.ackQueue, packet, 0);
         ret = true;
     }
     return ret;
 }
 
-bool stmLinkSendReliablePacket(StmLink *self, PodtpPacket *packet, int retry) {
-    self->packetBufferTx = *packet;
+bool stmLinkSendReliablePacket(PodtpPacket *packet, int retry) {
+    stmLink.packetBufferTx = *packet;
     packet->type = PODTP_TYPE_ACK;
     packet->length = 1;
-    self->waitForAck = true;
+    stmLink.waitForAck = true;
     for (int i = 0; i < retry; i++) {
         // printf("SR [%d]: p=%d, l=%d\n", i, packet->port, packet->length);
-        stmLinkSendPacket(self, &self->packetBufferTx);
-        xQueueReceive(self->ackQueue, packet, 1000);
+        stmLinkSendPacket(&stmLink.packetBufferTx);
+        xQueueReceive(stmLink.ackQueue, packet, 1000);
         if (packet->port == PODTP_PORT_OK) {
-            self->waitForAck = false;
+            stmLink.waitForAck = false;
             return true;
         }
     }
-    self->waitForAck = false;
+    stmLink.waitForAck = false;
     return false;
 }
 
@@ -98,7 +97,7 @@ typedef enum {
     PODTP_STATE_CHECK_SUM_2,
 } UartLinkState;
 
-bool stmLinkUartParsePacket(StmLink *self, uint8_t byte) {
+bool stmLinkUartParsePacket(uint8_t byte) {
     static UartLinkState state = PODTP_STATE_START_1;
     static uint8_t length = 0;
     static uint8_t check_sum[2] = { 0 };
@@ -117,16 +116,16 @@ bool stmLinkUartParsePacket(StmLink *self, uint8_t byte) {
             if (length > PODTP_MAX_DATA_LEN || length == 0) {
                 state = PODTP_STATE_START_1;
             } else {
-                self->packetBufferRx.length = 0;
+                stmLink.packetBufferRx.length = 0;
                 check_sum[0] = check_sum[1] = length;
                 state = PODTP_STATE_RAW_DATA;
             }
             break;
         case PODTP_STATE_RAW_DATA:
-            self->packetBufferRx.raw[self->packetBufferRx.length++] = byte;
+            stmLink.packetBufferRx.raw[stmLink.packetBufferRx.length++] = byte;
             check_sum[0] += byte;
             check_sum[1] += check_sum[0];
-            if (self->packetBufferRx.length == length) {
+            if (stmLink.packetBufferRx.length == length) {
                 state = PODTP_STATE_CHECK_SUM_1;
             }
             break;

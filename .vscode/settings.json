@@ -28,6 +28,7 @@
         "io_context": "c",
         "initializer_list": "c",
         "*.tcc": "c",
-        "buffer": "c"
+        "buffer": "c",
+        "esp_psram.h": "c"
     }
 }

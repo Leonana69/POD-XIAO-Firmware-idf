@@ -9,7 +9,6 @@ def main():
     podtp = Podtp(config)
     if podtp.connect():
         podtp.start_stream()
-        podtp.esp32_echo()
         time.sleep(4)
         podtp.disconnect()
 
