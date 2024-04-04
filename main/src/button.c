@@ -1,0 +1,39 @@
+#include "button.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
+#include "driver/gpio.h"
+#include "../include/config.h"
+
+void buttonInit() {
+	gpio_config_t io_conf = {};
+    io_conf.intr_type = GPIO_INTR_DISABLE;
+    io_conf.mode = GPIO_MODE_INPUT;
+    io_conf.pin_bit_mask = 1 << BUTTON_PIN;
+    io_conf.pull_down_en = GPIO_PULLDOWN_DISABLE;
+    io_conf.pull_up_en = GPIO_PULLUP_ENABLE;
+    gpio_config(&io_conf);
+	io_conf.mode = GPIO_MODE_OUTPUT;
+	io_conf.pin_bit_mask = 1 << LED_PIN;
+	io_conf.pull_up_en = GPIO_PULLUP_DISABLE;
+	gpio_config(&io_conf);
+}
+
+void buttonTask(void *pvParameters) {
+	bool buttonState = false;
+	while (true) {
+		if (gpio_get_level(BUTTON_PIN) == LOW) {
+			if (!buttonState) {
+				buttonState = true;
+				gpio_set_level(LED_PIN, HIGH);
+				printf("Button pressed\n");
+			}
+		} else {
+			if (buttonState) {
+				buttonState = false;
+				gpio_set_level(LED_PIN, LOW);
+				printf("Button released\n");
+			}
+		}
+		vTaskDelay(10);
+	}
+}
