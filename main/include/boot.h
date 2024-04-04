@@ -1,6 +1,7 @@
 #ifndef __BOOT_H__
 #define __BOOT_H__
 
+void bootInit();
 void bootSTM32Bootloader();
 void bootSTM32Firmware();
 void bootSTM32Disable();

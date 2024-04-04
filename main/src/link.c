@@ -1,5 +1,5 @@
 #include "link.h"
-// #include "stm_link.h"
+#include "stm_link.h"
 #include "wifi_link.h"
 #include "boot.h"
 
@@ -7,16 +7,16 @@ void linkProcessPacket(PodtpPacket *packet) {
     switch (packet->type) {
         case PODTP_TYPE_ACK:
             printf("ACK: %s\n", packet->port == PODTP_PORT_OK ? "OK" : "ERROR");
-            // if (!stmLink->ackQueuePut(packet)) {
-            //     printf("ACK forward to WiFi\n");
-            //     dataLink->sendPacket(packet);
-            // }
+            if (!stmLinkAckQueuePut(&stmLink, packet)) {
+                printf("ACK forward to WiFi\n");
+                wifiLinkSendPacket(&wifiLink, packet);
+            }
             break;
 
         case PODTP_TYPE_COMMAND:
         case PODTP_TYPE_CTRL:
             printf("CO/CT: (%d, %d, %d)\n", packet->type, packet->port, packet->length);
-            // stmLink->sendPacket(packet);
+            stmLinkSendPacket(&stmLink, packet);
             break;
 
         case PODTP_TYPE_LOG:
@@ -30,17 +30,17 @@ void linkProcessPacket(PodtpPacket *packet) {
                 printf("ECHO: (%d, %d)\n", packet->port, packet->length);
                 wifiLinkSendPacket(&wifiLink, packet);
             } else if (packet->port == PORT_START_STM32_BOOTLOADER) {
-                printf("Start STM32 Bootloader");
+                printf("Start STM32 Bootloader\n");
                 bootSTM32Bootloader();
             } else if (packet->port == PORT_START_STM32_FIRMWARE) {
-                printf("Start STM32 Firmware");
+                printf("Start STM32 Firmware\n");
                 bootSTM32Firmware();
             } else if (packet->port == PORT_ENABLE_STM32) {
                 if (packet->data[0]) {
-                    printf("Enable STM32");
+                    printf("Enable STM32\n");
                     bootSTM32Enable();
                 } else {
-                    printf("Disable STM32");
+                    printf("Disable STM32\n");
                     bootSTM32Disable();
                 }
             } else if (packet->port == PORT_CONFIG_CAMERA) {
@@ -50,7 +50,7 @@ void linkProcessPacket(PodtpPacket *packet) {
             }
             break;
         case PODTP_TYPE_BOOT_LOADER:
-            // stmLink->sendReliablePacket(packet);
+            stmLinkSendReliablePacket(&stmLink, packet, 10);
             wifiLinkSendPacket(&wifiLink, packet);
             break;
         default:

@@ -18,13 +18,15 @@
 #include "button.h"
 #include "boot.h"
 #include "wifi_link.h"
+#include "stm_link.h"
 
 void app_main(void) {
     printf("Hello, world!\n");
+    bootInit();
     buttonInit();
-    wifiInit(1);
+    wifiInit(0);
     wifiLinkInit(&wifiLink, 80);
-    xTaskCreatePinnedToCore(buttonTask, "button_task", 2048, NULL, 5, NULL, 1);
+    stmLinkInit(&stmLink);
     
     bootSTM32Bootloader();
 	bootSTM32Firmware();

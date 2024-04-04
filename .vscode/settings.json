@@ -26,6 +26,8 @@
         "unordered_map": "c",
         "vector": "c",
         "io_context": "c",
-        "initializer_list": "c"
+        "initializer_list": "c",
+        "*.tcc": "c",
+        "buffer": "c"
     }
 }

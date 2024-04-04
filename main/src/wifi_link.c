@@ -124,6 +124,7 @@ typedef enum {
     PODTP_STATE_LENGTH,
     PODTP_STATE_RAW_DATA
 } WifiLinkState;
+
 bool wifiParsePacket(WifiLink *self, uint8_t byte) {
     static WifiLinkState state = PODTP_STATE_START_1;
     static uint8_t length = 0;

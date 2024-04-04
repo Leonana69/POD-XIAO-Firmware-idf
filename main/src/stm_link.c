@@ -4,7 +4,27 @@
 #include "link.h"
 #include "driver/gpio.h"
 
-StmLink *stmLink;
+StmLink stmLink;
+
+#define UART_RX_BUFFER_LENGTH 256
+bool stmLinkUartParsePacket(StmLink *self, uint8_t byte);
+void stmLinkRxTask(void *pvParameters) {
+    StmLink *self = (StmLink *)pvParameters;
+    size_t length;
+    uint8_t buffer[UART_RX_BUFFER_LENGTH];
+    while (true) {
+        uart_get_buffered_data_len(self->uartPort, &length);
+        if (length > 0) {
+            int len = uart_read_bytes(self->uartPort, buffer, UART_RX_BUFFER_LENGTH, 1);
+            for (int i = 0; i < len; i++) {
+                if (stmLinkUartParsePacket(self, buffer[i])) {
+                    linkProcessPacket(&self->packetBufferRx);
+                }
+            }
+        }
+        vTaskDelay(1);
+    }
+}
 
 void stmLinkInit(StmLink *self) {
     self->ackQueue = xQueueCreate(3, sizeof(PodtpPacket));
@@ -15,16 +35,18 @@ void stmLinkInit(StmLink *self) {
         .data_bits = UART_DATA_8_BITS,
         .parity    = UART_PARITY_DISABLE,
         .stop_bits = UART_STOP_BITS_1,
-        .flow_ctrl = UART_HW_FLOWCTRL_DISABLE
+        .flow_ctrl = UART_HW_FLOWCTRL_DISABLE,
+        .source_clk = UART_SCLK_XTAL,
     };
     uart_param_config(UART_NUM_0, &uart_config);
-    uart_driver_install(UART_NUM_0, 256, 0, 0, NULL, 0);
+    uart_driver_install(UART_NUM_0, UART_RX_BUFFER_LENGTH, 0, 0, NULL, 0);
     uart_set_pin(UART_NUM_0, STM_TX_PIN, STM_RX_PIN, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE);
     self->uartPort = UART_NUM_0;
+    xTaskCreate(stmLinkRxTask, "stmLinkRxTask", 2048, self, 10, &self->rxTaskHandle);
 }
 
 void stmLinkSendPacket(StmLink *self, PodtpPacket *packet) {
-    static uint8_t buffer[PODTP_MAX_DATA_LEN + 5] = { PODTP_START_BYTE_1, PODTP_START_BYTE_2, 0 };
+    static uint8_t buffer[PODTP_MAX_DATA_LEN + 9] = { PODTP_START_BYTE_1, PODTP_START_BYTE_2, 0 };
     uint8_t check_sum[2] = { 0 };
     check_sum[0] = check_sum[1] = packet->length;
     buffer[2] = packet->length;
@@ -35,12 +57,10 @@ void stmLinkSendPacket(StmLink *self, PodtpPacket *packet) {
     }
     buffer[packet->length + 3] = check_sum[0];
     buffer[packet->length + 4] = check_sum[1];
-    uart_write_bytes(self->uartPort, (const char *)buffer, packet->length + 5);
+    // add tail to reset the state machine
+    *(uint32_t *) &buffer[packet->length + 5] = 0x0A0D0A0D;
+    uart_write_bytes(self->uartPort, (const char *)buffer, packet->length + 9);
 }
-
-// void StmLink::write(uint8_t *data, uint8_t length) {
-//     uartSerial.write(data, length);
-// }
 
 bool stmLinkAckQueuePut(StmLink *self, PodtpPacket *packet) {
     bool ret = false;
@@ -57,7 +77,7 @@ bool stmLinkSendReliablePacket(StmLink *self, PodtpPacket *packet, int retry) {
     packet->length = 1;
     self->waitForAck = true;
     for (int i = 0; i < retry; i++) {
-        // DEBUG_PRINT("SR [%d]: p=%d, l=%d\n", i, packet->port, packet->length);
+        // printf("SR [%d]: p=%d, l=%d\n", i, packet->port, packet->length);
         stmLinkSendPacket(self, &self->packetBufferTx);
         xQueueReceive(self->ackQueue, packet, 1000);
         if (packet->port == PODTP_PORT_OK) {
@@ -69,71 +89,56 @@ bool stmLinkSendReliablePacket(StmLink *self, PodtpPacket *packet, int retry) {
     return false;
 }
 
-// void stmLinkRxTask(void *pvParameters) {
-//     stmLink->rxTask(pvParameters);
-// }
+typedef enum {
+    PODTP_STATE_START_1,
+    PODTP_STATE_START_2,
+    PODTP_STATE_LENGTH,
+    PODTP_STATE_RAW_DATA,
+    PODTP_STATE_CHECK_SUM_1,
+    PODTP_STATE_CHECK_SUM_2,
+} UartLinkState;
 
-// void StmLink::rxTask(void *pvParameters) {
-//     while (true) {
-//         while (uartSerial.available()) {
-//             if (uartParsePacket(uartSerial.read())) {
-//                 linkProcessPacket(&packetBufferRx);
-//             }
-//         }
-//         vTaskDelay(1);
-//     }
-// }
+bool stmLinkUartParsePacket(StmLink *self, uint8_t byte) {
+    static UartLinkState state = PODTP_STATE_START_1;
+    static uint8_t length = 0;
+    static uint8_t check_sum[2] = { 0 };
 
-// typedef enum {
-//     PODTP_STATE_START_1,
-//     PODTP_STATE_START_2,
-//     PODTP_STATE_LENGTH,
-//     PODTP_STATE_RAW_DATA,
-//     PODTP_STATE_CHECK_SUM_1,
-//     PODTP_STATE_CHECK_SUM_2,
-// } UartLinkState;
-
-// bool StmLink::uartParsePacket(uint8_t byte) {
-//     static UartLinkState state = PODTP_STATE_START_1;
-//     static uint8_t length = 0;
-//     static uint8_t check_sum[2] = { 0 };
-
-//     switch (state) {
-//         case PODTP_STATE_START_1:
-//             if (byte == PODTP_START_BYTE_1) {
-//                 state = PODTP_STATE_START_2;
-//             }
-//             break;
-//         case PODTP_STATE_START_2:
-//             state = (byte == PODTP_START_BYTE_2) ? PODTP_STATE_LENGTH : PODTP_STATE_START_1;
-//             break;
-//         case PODTP_STATE_LENGTH:
-//             length = byte;
-//             if (length > PODTP_MAX_DATA_LEN || length == 0) {
-//                 state = PODTP_STATE_START_1;
-//             } else {
-//                 packetBufferRx.length = 0;
-//                 check_sum[0] = check_sum[1] = length;
-//                 state = PODTP_STATE_RAW_DATA;
-//             }
-//             break;
-//         case PODTP_STATE_RAW_DATA:
-//             packetBufferRx.raw[packetBufferRx.length++] = byte;
-//             check_sum[0] += byte;
-//             check_sum[1] += check_sum[0];
-//             if (packetBufferRx.length == length) {
-//                 state = PODTP_STATE_CHECK_SUM_1;
-//             }
-//             break;
-//         case PODTP_STATE_CHECK_SUM_1:
-//             state = (check_sum[0] == byte) ? PODTP_STATE_CHECK_SUM_2 : PODTP_STATE_START_1;
-//             break;
-//         case PODTP_STATE_CHECK_SUM_2:
-//             state = PODTP_STATE_START_1;
-//             if (check_sum[1] == byte) {
-//                 return true;
-//             }
-//             break;
-//     }
-//     return false;
-// }
+    switch (state) {
+        case PODTP_STATE_START_1:
+            if (byte == PODTP_START_BYTE_1) {
+                state = PODTP_STATE_START_2;
+            }
+            break;
+        case PODTP_STATE_START_2:
+            state = (byte == PODTP_START_BYTE_2) ? PODTP_STATE_LENGTH : PODTP_STATE_START_1;
+            break;
+        case PODTP_STATE_LENGTH:
+            length = byte;
+            if (length > PODTP_MAX_DATA_LEN || length == 0) {
+                state = PODTP_STATE_START_1;
+            } else {
+                self->packetBufferRx.length = 0;
+                check_sum[0] = check_sum[1] = length;
+                state = PODTP_STATE_RAW_DATA;
+            }
+            break;
+        case PODTP_STATE_RAW_DATA:
+            self->packetBufferRx.raw[self->packetBufferRx.length++] = byte;
+            check_sum[0] += byte;
+            check_sum[1] += check_sum[0];
+            if (self->packetBufferRx.length == length) {
+                state = PODTP_STATE_CHECK_SUM_1;
+            }
+            break;
+        case PODTP_STATE_CHECK_SUM_1:
+            state = (check_sum[0] == byte) ? PODTP_STATE_CHECK_SUM_2 : PODTP_STATE_START_1;
+            break;
+        case PODTP_STATE_CHECK_SUM_2:
+            state = PODTP_STATE_START_1;
+            if (check_sum[1] == byte) {
+                return true;
+            }
+            break;
+    }
+    return false;
+}

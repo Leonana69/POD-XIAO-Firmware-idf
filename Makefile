@@ -13,6 +13,9 @@ flash:
 	fi
 	screen /dev/cu.usbmodem*
 
+open:
+	@screen -r
+
 close:
 	@echo "Closing screen"
 	@screen -X -S $$(screen -ls | grep Detached | awk '{print $$1}') quit
