@@ -2,7 +2,7 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "driver/gpio.h"
-#include "../include/config.h"
+#include "config.h"
 
 void buttonInit() {
 	gpio_config_t io_conf = {};

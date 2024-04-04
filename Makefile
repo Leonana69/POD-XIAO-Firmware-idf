@@ -4,7 +4,7 @@ build:
 	idf.py build
 
 flash:
-	make close
+	-make close
 	@usbport=$$(ls /dev/cu.usbmodem* | head -1); \
 	if [ -z "$$usbport" ]; then \
 		echo "No USB port found"; \
