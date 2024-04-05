@@ -109,11 +109,15 @@ def send_load_buffer(podtp: Podtp, file_path) -> bool:
 def start_stm32_bootloader(podtp: Podtp):
     packet = PodtpPacket().set_header(PodtpType.ESP32,
                                       PodtpPort.START_STM32_BOOTLOADER)
+    packet.length = 2
+    packet.data[0] = 1
     podtp.send_packet(packet)
 
 def start_stm32_firmware(podtp: Podtp):
     packet = PodtpPacket().set_header(PodtpType.ESP32,
-                                      PodtpPort.START_STM32_FIRMWARE)
+                                      PodtpPort.START_STM32_BOOTLOADER)
+    packet.length = 2
+    packet.data[0] = 0
     podtp.send_packet(packet)
 
 if __name__ == '__main__':

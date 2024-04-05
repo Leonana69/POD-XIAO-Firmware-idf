@@ -40,6 +40,7 @@ typedef struct {
 void wifiInit(uint8_t configIndex);
 void wifiLinkInit();
 void wifiLinkSendPacket(PodtpPacket *packet);
+void wifiLinkResetStreamLink();
 void wifiLinkSendImage(uint8_t *data, uint32_t length);
 
 #endif // __WIFI_LINK_H__

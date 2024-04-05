@@ -29,6 +29,7 @@
         "initializer_list": "c",
         "*.tcc": "c",
         "buffer": "c",
-        "esp_psram.h": "c"
+        "esp_psram.h": "c",
+        "camera_server.h": "c"
     }
 }

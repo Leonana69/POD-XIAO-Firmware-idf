@@ -2,6 +2,7 @@
 #include "stm_link.h"
 #include "wifi_link.h"
 #include "boot.h"
+#include "camera_server.h"
 
 void linkProcessPacket(PodtpPacket *packet) {
     switch (packet->type) {
@@ -30,11 +31,13 @@ void linkProcessPacket(PodtpPacket *packet) {
                 printf("ECHO: (%d, %d)\n", packet->port, packet->length);
                 wifiLinkSendPacket(packet);
             } else if (packet->port == PORT_START_STM32_BOOTLOADER) {
-                printf("Start STM32 Bootloader\n");
-                bootSTM32Bootloader();
-            } else if (packet->port == PORT_START_STM32_FIRMWARE) {
-                printf("Start STM32 Firmware\n");
-                bootSTM32Firmware();
+                if (packet->data[0] == 1) {
+                    printf("Start STM32 Bootloader\n");
+                    bootSTM32Bootloader();
+                } else {
+                    printf("Start STM32 Firmware\n");
+                    bootSTM32Firmware();
+                }
             } else if (packet->port == PORT_ENABLE_STM32) {
                 if (packet->data[0]) {
                     printf("Enable STM32\n");
@@ -44,7 +47,16 @@ void linkProcessPacket(PodtpPacket *packet) {
                     bootSTM32Disable();
                 }
             } else if (packet->port == PORT_CONFIG_CAMERA) {
-                printf("Config Camera");
+                printf("Config Camera ");
+                if (packet->length - 1 != sizeof(_camera_config_t)) {
+                    printf(" [FAILED]\n");
+                } else {
+                    printf("[OK]\n");
+                    cameraConfig((_camera_config_t *) &packet->data[0]);
+                }
+            } else if (packet->port == PORT_RESET_STREAM_LINK) {
+                printf("Reset Stream Link\n");
+                wifiLinkResetStreamLink();
             } else {
                 printf("Unknown ESP32 packet: p=%d, l=%d\n", packet->port, packet->length);
             }

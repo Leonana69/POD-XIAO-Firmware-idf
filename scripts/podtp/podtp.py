@@ -8,6 +8,7 @@ from .link import WifiLink
 from .utils import print_t
 from .podtp_parser import PodtpParser
 from .image_parser import ImageParser
+from .camera_config import CameraConfig
 
 COMMAND_TIMEOUT_MS = 450
 
@@ -44,10 +45,24 @@ class Podtp:
         self.data_link.disconnect()
 
     def start_stream(self):
+        self.reset_stream_link()
+        self.config_camera(CameraConfig())
+        time.sleep(0.5) # wait for the esp32 to configure the camera and close the previous TCP link
         self.stream_on = self.stream_link.connect()
         if self.stream_on:
             self.stream_thread = Thread(target=self.stream_func)
             self.stream_thread.start()
+
+    def reset_stream_link(self):
+        packet = PodtpPacket().set_header(PodtpType.ESP32, PodtpPort.RESET_STREAM_LINK)
+        self.send_packet(packet)
+
+    def config_camera(self, config: CameraConfig):
+        packet = PodtpPacket().set_header(PodtpType.ESP32, PodtpPort.CONFIG_CAMERA)
+        config_bytes = config.pack()
+        packet.length = 1 + len(config_bytes)
+        packet.data[:len(config_bytes)] = config_bytes
+        self.send_packet(packet)
 
     def stop_stream(self):
         if not self.stream_on:
@@ -77,7 +92,7 @@ class Podtp:
 
     def stream_func(self):
         while self.stream_on:
-            self.image_parser.process(self.stream_link.receive())
+            self.image_parser.process(self.stream_link.receive(65535))
             time.sleep(0.05)
 
     def get_packet(self, type: PodtpType, timeout = 1) -> Optional[PodtpPacket]:

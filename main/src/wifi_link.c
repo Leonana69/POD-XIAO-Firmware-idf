@@ -189,6 +189,12 @@ void wifiLinkSendPacket(PodtpPacket *packet) {
     }
 }
 
+void wifiLinkResetStreamLink() {
+    streamLink.connected = false;
+    if (streamLink.client_socket >= 0)
+        close(streamLink.client_socket);
+}
+
 void wifiLinkSendImage(uint8_t *data, uint32_t length) {
     if (!streamLink.connected) {
         int client_sock = accept(streamLink.socket, (struct sockaddr *)&(streamLink.client_addr), &(streamLink.client_addr_len));

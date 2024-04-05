@@ -53,7 +53,7 @@ class ImageParser:
                     self.image_size_index += 1
                     if self.image_size_index == 4:
                         self.image_size = int.from_bytes(self.image_size_bytes, 'little')
-                        print(f'Image size: {self.image_size}')
+                        # print(f'Image size: {self.image_size}')
                         self.timestamp = time.time()
                         self.image_bytes = bytearray(self.image_size)
                         self.image_index = 0
@@ -70,6 +70,7 @@ class ImageParser:
                         self.rx_state = RxState.IMAGE_STATE_START_1
                         image_name = os.path.join(self.cache_path, f'{self.image_count}.jpg')
                         self.image.save(image_name)
-                        print(f'Image saved as {image_name}, data rate: {self.image_size / (time.time() - self.timestamp):.2f} bytes/s')
+                        duration = time.time() - self.timestamp
+                        print(f'Image size {self.image_size}, time: {duration}, data rate: {self.image_size / (duration):.2f} bytes/s')
                         self.image_count += 1
                     
