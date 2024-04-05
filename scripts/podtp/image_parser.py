@@ -2,6 +2,7 @@ import io, os, time
 from enum import Enum
 from PIL import Image
 from typing import Optional
+from threading import Lock
 from .utils import print_t
 
 CAMERA_START_BYTE_1 = 0xAE
@@ -14,7 +15,7 @@ class RxState(Enum):
     IMAGE_STATE_RAW_DATA = 3
 
 class ImageParser:
-    def __init__(self, cache_path: str = 'cache'):
+    def __init__(self, save_image: bool = False, cache_path: str = 'cache'):
         self.image = None
         self.rx_state = RxState.IMAGE_STATE_START_1
         # 4 bytes for the image size
@@ -24,9 +25,21 @@ class ImageParser:
         self.image_size = None
         self.image_bytes = None
         self.image_index = None
-        self.image: Image = None
+        self.lock = Lock()
+        self.frame: Image = None
         self.cache_path = cache_path
         self.timestamp = 0
+        self.save_image = save_image
+
+    @property
+    def frame(self):
+        with self.lock:
+            return self._frame
+        
+    @frame.setter
+    def frame(self, value):
+        with self.lock:
+            self._frame = value
 
     def process(self, data: Optional[bytes]):
         if data is None:
@@ -53,7 +66,6 @@ class ImageParser:
                     self.image_size_index += 1
                     if self.image_size_index == 4:
                         self.image_size = int.from_bytes(self.image_size_bytes, 'little')
-                        # print(f'Image size: {self.image_size}')
                         self.timestamp = time.time()
                         self.image_bytes = bytearray(self.image_size)
                         self.image_index = 0
@@ -66,11 +78,12 @@ class ImageParser:
                     self.image_index += copy_bytes
                     index += copy_bytes
                     if self.image_index == self.image_size:
-                        self.image = Image.open(io.BytesIO(self.image_bytes))
+                        self.frame = Image.open(io.BytesIO(self.image_bytes))
                         self.rx_state = RxState.IMAGE_STATE_START_1
-                        image_name = os.path.join(self.cache_path, f'{self.image_count}.jpg')
-                        self.image.save(image_name)
-                        duration = time.time() - self.timestamp
-                        print(f'Image size {self.image_size}, time: {duration}, data rate: {self.image_size / (duration):.2f} bytes/s')
+                        if self.save_image:
+                            image_name = os.path.join(self.cache_path, f'{self.image_count}.jpg')
+                            self.frame.save(image_name)
+                        # duration = time.time() - self.timestamp
+                        # print(f'Image size {self.image_size}, time: {duration}, data rate: {self.image_size / (duration):.2f} bytes/s')
                         self.image_count += 1
                     
