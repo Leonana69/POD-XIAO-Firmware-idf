@@ -20,7 +20,7 @@ void app_main(void) {
     printf("Hello, world!\n");
     bootInit();
     buttonInit();
-    wifiInit(1);
+    wifiInit(-1);
     wifiLinkInit();
     stmLinkInit();
     cameraInit();

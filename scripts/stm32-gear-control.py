@@ -12,6 +12,7 @@ def control(podtp: Podtp):
     screen = pygame.display.set_mode((480, 480))
     pygame.display.set_caption('Gear Control')
     running = True
+    SPEED = 6
     vx = 0
     vy = 0
     vr = 0
@@ -24,13 +25,13 @@ def control(podtp: Podtp):
                 if event.key == pygame.K_ESCAPE:
                     running = False
                 if event.key == pygame.K_w:
-                    vx = 2
+                    vx = SPEED
                 elif event.key == pygame.K_s:
-                    vx = -2
+                    vx = -SPEED
                 elif event.key == pygame.K_a:
-                    vy = 2
+                    vy = -SPEED
                 elif event.key == pygame.K_d:
-                    vy = -2
+                    vy = SPEED
                 elif event.key == pygame.K_q:
                     vr = 30
                 elif event.key == pygame.K_e:
@@ -48,13 +49,14 @@ def control(podtp: Podtp):
                     vr = 0
                 elif event.key == pygame.K_e:
                     vr = 0
+        print_t(f'vx: {vx} vy: {vy} vr: {vr}')
         podtp.send_command_hover(0, vx, vy, vr)
         # You can update your game logic and draw here
         # For this example, we'll just fill the screen with black
         screen.fill((0, 0, 0))
         # Update the display
         pygame.display.flip()
-        clock.tick(10)
+        clock.tick(50)
 
     # Quit Pygame
     pygame.quit()

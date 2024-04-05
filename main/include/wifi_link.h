@@ -37,7 +37,7 @@ typedef struct {
     // Add other members as needed
 } WifiLink;
 
-void wifiInit(uint8_t configIndex);
+void wifiInit(int8_t configIndex);
 void wifiLinkInit();
 void wifiLinkSendPacket(PodtpPacket *packet);
 void wifiLinkResetStreamLink();

@@ -10,6 +10,7 @@
 
 static WifiLink controlLink;
 static WifiLink streamLink;
+static bool wifiConnected = false;
 
 // Initialize the PacketBuffer
 void PacketBufferInit(PacketBuffer* buffer) {
@@ -38,7 +39,7 @@ bool PacketBufferEmpty(PacketBuffer* buffer) {
     return buffer->head == buffer->tail;
 }
 
-wifi_config_t wifiConfigs[2] = {
+wifi_config_t wifiConfigs[3] = {
     {
         .sta = {
             .ssid = "YECL-tplink",
@@ -48,6 +49,12 @@ wifi_config_t wifiConfigs[2] = {
     {
         .sta = {
             .ssid = "LEONA",
+            .password = "64221771",
+        },
+    },
+    {
+        .sta = {
+            .ssid = "YECL-GL",
             .password = "64221771",
         },
     },
@@ -78,7 +85,38 @@ static void event_handler(void* arg, esp_event_base_t event_base,
     }
 }
 
-void wifiInit(uint8_t configIndex) {
+int8_t wifiScan() {
+    int8_t configIndex = -1;
+    wifi_scan_config_t scan_config = {
+        .ssid = NULL,
+        .bssid = NULL,
+        .channel = 0,
+        .show_hidden = false
+    };
+
+    ESP_ERROR_CHECK(esp_wifi_scan_start(&scan_config, true));
+    uint16_t ap_count = 0;
+    ESP_ERROR_CHECK(esp_wifi_scan_get_ap_num(&ap_count));
+    wifi_ap_record_t *ap_list = (wifi_ap_record_t *)malloc(sizeof(wifi_ap_record_t) * ap_count);
+    ESP_ERROR_CHECK(esp_wifi_scan_get_ap_records(&ap_count, ap_list));
+
+    for (int i = 0; i < ap_count; i++) {
+        bool found = false;
+        for (int j = 0; j < 3; j++) {
+            if (strcmp((char *) ap_list[i].ssid, (char *) wifiConfigs[j].sta.ssid) == 0) {
+                configIndex = j;
+                found = true;
+                break;
+            }
+        }
+        if (found)
+            break;
+    }
+    free(ap_list);
+    return configIndex;
+}
+
+void wifiInit(int8_t configIndex) {
     esp_err_t ret = nvs_flash_init();
     if (ret == ESP_ERR_NVS_NO_FREE_PAGES || ret == ESP_ERR_NVS_NEW_VERSION_FOUND) {
         ESP_ERROR_CHECK(nvs_flash_erase());
@@ -91,6 +129,19 @@ void wifiInit(uint8_t configIndex) {
     esp_netif_create_default_wifi_sta();
     wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
     ESP_ERROR_CHECK(esp_wifi_init(&cfg));
+
+    ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA));
+    ESP_ERROR_CHECK(esp_wifi_start());
+
+    if (configIndex < 0 || configIndex > 2) {
+        configIndex = wifiScan();
+    }
+
+    if (configIndex < 0) {
+        printf("Cannot find any known AP\n");
+        return;
+    }
+
     esp_event_handler_instance_t instance_any_id;
     esp_event_handler_instance_t instance_got_ip;
     ESP_ERROR_CHECK(esp_event_handler_instance_register(WIFI_EVENT,
@@ -103,7 +154,7 @@ void wifiInit(uint8_t configIndex) {
                                                         &event_handler,
                                                         NULL,
                                                         &instance_got_ip));
-
+    ESP_ERROR_CHECK(esp_wifi_stop());
     ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA));
     ESP_ERROR_CHECK(esp_wifi_set_config(ESP_IF_WIFI_STA, &wifiConfigs[configIndex]));
     ESP_ERROR_CHECK(esp_wifi_start());
@@ -113,9 +164,10 @@ void wifiInit(uint8_t configIndex) {
             pdFALSE,
             portMAX_DELAY);
     if (bits & WIFI_CONNECTED_BIT) {
-        printf("Connecting to AP [OK]\n");
+        printf("Connecting to %s [OK]\n", (char *) wifiConfigs[configIndex].sta.ssid);
+        wifiConnected = true;
     } else if (bits & WIFI_FAIL_BIT) {
-        printf("Connecting to AP [FAILED]\n");
+        printf("Connecting to %s [FAILED]\n", (char *) wifiConfigs[configIndex].sta.ssid);
     } else {
         printf("UNEXPECTED EVENT\n");
     }
@@ -274,6 +326,9 @@ bool tcpLinkInit(WifiLink *self, uint16_t port) {
 }
 
 void wifiLinkInit() {
+    if (!wifiConnected)
+        return;
+
     if (tcpLinkInit(&controlLink, 80)) {
         // Create the Rx task
         xTaskCreatePinnedToCore(wifiLinkRxTask, "control_link_rx_task", 4096, &controlLink, 5, &controlLink.rx_task_handle, 1);
