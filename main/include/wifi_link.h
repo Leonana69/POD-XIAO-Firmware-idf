@@ -8,7 +8,7 @@
 #include "freertos/FreeRTOS.h"
 #include "sys/socket.h"
 
-#define MAX_PACKETS 20
+#define MAX_PACKETS 50
 
 typedef struct {
     PodtpPacket raw[MAX_PACKETS];

@@ -33,7 +33,6 @@ class Podtp:
             self.packet_thread.start()
             self.keep_alive_thread = Thread(target=self.keep_alive_func)
             self.keep_alive_thread.start()
-            self.send_command_setpoint(0, 0, 0, 0)
         return self.connected
 
     def disconnect(self):

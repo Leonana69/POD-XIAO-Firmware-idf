@@ -33,9 +33,9 @@ def control(podtp: Podtp):
                 elif event.key == pygame.K_d:
                     vy = SPEED
                 elif event.key == pygame.K_q:
-                    vr = 30
+                    vr = 10
                 elif event.key == pygame.K_e:
-                    vr = -30
+                    vr = -10
             elif event.type == pygame.KEYUP:
                 if event.key == pygame.K_w:
                     vx = 0
@@ -49,7 +49,10 @@ def control(podtp: Podtp):
                     vr = 0
                 elif event.key == pygame.K_e:
                     vr = 0
-        print_t(f'vx: {vx} vy: {vy} vr: {vr}')
+        if vx == 0 and vy == 0 and vr == 0:
+            pass
+        else:
+            print_t(f'vx: {vx} vy: {vy} vr: {vr}')
         podtp.send_command_hover(0, vx, vy, vr)
         # You can update your game logic and draw here
         # For this example, we'll just fill the screen with black
