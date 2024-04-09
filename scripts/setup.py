@@ -6,7 +6,7 @@ setup(
     packages=find_packages(),
     install_requires=[
         # Any dependencies your package needs to work, e.g.,
-        # 'numpy>=1.18.1',
+        'numpy>=1.18.1',
         'Pillow>=8.0',
     ],
 )

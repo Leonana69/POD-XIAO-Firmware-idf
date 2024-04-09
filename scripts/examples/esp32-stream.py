@@ -11,7 +11,7 @@ def main():
     podtp = Podtp(config)
     if podtp.connect():
         podtp.start_stream()
-        frame_reader = podtp.image_parser
+        frame_reader = podtp.frame_reader
         while True:
             frame = frame_reader.frame
             if frame is not None:

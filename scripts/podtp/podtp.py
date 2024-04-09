@@ -7,7 +7,7 @@ from .podtp_packet import PODTP_MAX_DATA_LEN, PodtpPacket, PodtpType, PodtpPort
 from .link import WifiLink
 from .utils import print_t
 from .podtp_parser import PodtpParser
-from .image_parser import ImageParser
+from .frame_reader import FrameReader
 from .camera_config import CameraConfig
 
 COMMAND_TIMEOUT_MS = 450
@@ -23,7 +23,7 @@ class Podtp:
             self.packet_queue[type.value] = queue.Queue()
 
         self.stream_link = WifiLink(config["ip"], config["stream_port"])
-        self.image_parser = ImageParser()
+        self.frame_reader = FrameReader()
         self.stream_on = False
 
     def connect(self) -> bool:
@@ -91,7 +91,7 @@ class Podtp:
 
     def stream_func(self):
         while self.stream_on:
-            self.image_parser.process(self.stream_link.receive(65535))
+            self.frame_reader.process(self.stream_link.receive(65535))
             time.sleep(0.05)
 
     def get_packet(self, type: PodtpType, timeout = 1) -> Optional[PodtpPacket]:
