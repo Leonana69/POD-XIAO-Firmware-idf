@@ -4,12 +4,13 @@ import pygame
 import sys
 
 def control(podtp: Podtp):
+    podtp.start_stream()
     # Initialize Pygame
     pygame.init()
     clock = pygame.time.Clock()
 
     # Set up the display
-    screen = pygame.display.set_mode((480, 480))
+    screen = pygame.display.set_mode((800, 600))
     pygame.display.set_caption('Gear Control')
     running = True
     SPEED = 6
@@ -56,7 +57,9 @@ def control(podtp: Podtp):
         podtp.send_command_hover(0, vx, vy, vr)
         # You can update your game logic and draw here
         # For this example, we'll just fill the screen with black
-        screen.fill((0, 0, 0))
+        # screen.fill((0, 0, 0))
+        image_surface = pygame.surfarray.make_surface(podtp.frame_reader.frame.transpose(1, 0, 2))
+        screen.blit(image_surface, (0, 0))
         # Update the display
         pygame.display.flip()
         clock.tick(50)

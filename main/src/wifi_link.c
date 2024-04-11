@@ -42,6 +42,12 @@ bool PacketBufferEmpty(PacketBuffer* buffer) {
 wifi_config_t wifiConfigs[3] = {
     {
         .sta = {
+            .ssid = "YECL-GL",
+            .password = "64221771",
+        },
+    },
+    {
+        .sta = {
             .ssid = "YECL-tplink",
             .password = "08781550",
         },
@@ -51,13 +57,7 @@ wifi_config_t wifiConfigs[3] = {
             .ssid = "LEONA",
             .password = "64221771",
         },
-    },
-    {
-        .sta = {
-            .ssid = "YECL-GL",
-            .password = "64221771",
-        },
-    },
+    }
 };
 
 #define WIFI_CONNECTED_BIT BIT0
@@ -100,9 +100,9 @@ int8_t wifiScan() {
     wifi_ap_record_t *ap_list = (wifi_ap_record_t *)malloc(sizeof(wifi_ap_record_t) * ap_count);
     ESP_ERROR_CHECK(esp_wifi_scan_get_ap_records(&ap_count, ap_list));
 
-    for (int i = 0; i < ap_count; i++) {
+    for (int j = 0; j < 3; j++) {
         bool found = false;
-        for (int j = 0; j < 3; j++) {
+        for (int i = 0; i < ap_count; i++) {
             if (strcmp((char *) ap_list[i].ssid, (char *) wifiConfigs[j].sta.ssid) == 0) {
                 configIndex = j;
                 found = true;
@@ -112,6 +112,7 @@ int8_t wifiScan() {
         if (found)
             break;
     }
+    
     free(ap_list);
     return configIndex;
 }

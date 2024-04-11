@@ -11,9 +11,9 @@ class CameraConfig:
         FRAMESIZE_XGA = 10     # 1024x768
         FRAMESIZE_HD = 11      # 1280x720
     
-    def __init__(self, on: int = 1, frame_size: FrameSize = FrameSize.FRAMESIZE_VGA, \
-                quality: int = 12, brightness: int = 2, contrast: int = 0, \
-                saturation: int = 0, sharpness: int = 0) -> None:
+    def __init__(self, on: int = 1, frame_size: FrameSize = FrameSize.FRAMESIZE_SVGA, \
+                quality: int = 6, brightness: int = 2, contrast: int = 1, \
+                saturation: int = 0, sharpness: int = 1) -> None:
         self.on = on
         self.frame_size = frame_size
         self.quality = quality
