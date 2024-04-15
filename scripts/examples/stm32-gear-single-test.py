@@ -17,7 +17,8 @@ def main():
                 print_t(f'Sending setpoint {count}')
                 # max speed: 4
                 # podtp.send_command_hover(0, 1, 0, 0)
-                podtp.send_command_hover(0, 0, 0, 5)
+                # podtp.send_command_hover(0, 4, 0, 0)
+                podtp.send_command_hover(0, 4, 1, 0)
                 time.sleep(0.1)
                 count += 1
             

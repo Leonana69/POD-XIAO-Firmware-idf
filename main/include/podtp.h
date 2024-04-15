@@ -3,7 +3,7 @@
 
 #include <stdint.h>
 
-#define PODTP_MAX_DATA_LEN 126
+#define PODTP_MAX_DATA_LEN 254
 
 #define PODTP_START_BYTE_1 0xAD
 #define PODTP_START_BYTE_2 0x6E

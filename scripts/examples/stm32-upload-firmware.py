@@ -40,6 +40,7 @@ def read_bin_file(file_path):
         return file.read()
 
 def send_write_flash(podtp: Podtp, flash_page, num_pages) -> bool:
+    # print_t(f'Writing flash page {flash_page} with {num_pages} pages')
     packet = PodtpPacket().set_header(PodtpType.BOOT_LOADER,
                                       PodtpPort.WRITE_FLASH, ack=True)
     write_flash = WriteFlash()
@@ -102,7 +103,7 @@ def send_load_buffer(podtp: Podtp, file_path) -> bool:
             return False
         index += packet_load
 
-    if not send_write_flash(podtp, page // 10 * 10, page_count % 10):
+    if not send_write_flash(podtp, page // 10 * 10, page_count - page // 10 * 10):
         return False
     return True
 
