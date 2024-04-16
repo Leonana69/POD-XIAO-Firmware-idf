@@ -7,7 +7,7 @@
 void linkProcessPacket(PodtpPacket *packet) {
     switch (packet->type) {
         case PODTP_TYPE_ACK:
-            printf("ACK: %s\n", packet->port == PODTP_PORT_OK ? "OK" : "ERROR");
+            printf("ACK: %s\n", packet->port == PORT_ACK_OK ? "OK" : "ERROR");
             if (!stmLinkAckQueuePut(packet)) {
                 printf("ACK forward to WiFi\n");
                 wifiLinkSendPacket(packet);
@@ -17,7 +17,11 @@ void linkProcessPacket(PodtpPacket *packet) {
         case PODTP_TYPE_COMMAND:
         case PODTP_TYPE_CTRL:
             printf("CO/CT: (%d, %d, %d)\n", packet->type, packet->port, packet->length);
-            stmLinkSendPacket(packet);
+            if (packet->ack == true) {
+                stmLinkSendReliablePacket(packet, 5);
+                wifiLinkSendPacket(packet);
+            } else
+                stmLinkSendPacket(packet);
             break;
 
         case PODTP_TYPE_LOG:
@@ -27,10 +31,10 @@ void linkProcessPacket(PodtpPacket *packet) {
 
         case PODTP_TYPE_ESP32:
             // packets for ESP32 are not sent to STM32
-            if (packet->port == PORT_ECHO) {
+            if (packet->port == PORT_ESP32_ECHO) {
                 printf("ECHO: (%d, %d)\n", packet->port, packet->length);
                 wifiLinkSendPacket(packet);
-            } else if (packet->port == PORT_START_STM32_BOOTLOADER) {
+            } else if (packet->port == PORT_ESP32_START_STM32_BOOTLOADER) {
                 if (packet->data[0] == 1) {
                     printf("Start STM32 Bootloader\n");
                     bootSTM32Bootloader();
@@ -38,7 +42,7 @@ void linkProcessPacket(PodtpPacket *packet) {
                     printf("Start STM32 Firmware\n");
                     bootSTM32Firmware();
                 }
-            } else if (packet->port == PORT_ENABLE_STM32) {
+            } else if (packet->port == PORT_ESP32_ENABLE_STM32) {
                 if (packet->data[0]) {
                     printf("Enable STM32\n");
                     bootSTM32Enable();
@@ -46,7 +50,7 @@ void linkProcessPacket(PodtpPacket *packet) {
                     printf("Disable STM32\n");
                     bootSTM32Disable();
                 }
-            } else if (packet->port == PORT_CONFIG_CAMERA) {
+            } else if (packet->port == PORT_ESP32_CONFIG_CAMERA) {
                 printf("Config Camera ");
                 if (packet->length - 1 != sizeof(_camera_config_t)) {
                     printf(" [FAILED]\n");
@@ -54,7 +58,7 @@ void linkProcessPacket(PodtpPacket *packet) {
                     printf("[OK]\n");
                     cameraConfig((_camera_config_t *) &packet->data[0]);
                 }
-            } else if (packet->port == PORT_RESET_STREAM_LINK) {
+            } else if (packet->port == PORT_ESP32_RESET_STREAM_LINK) {
                 printf("Reset Stream Link\n");
                 wifiLinkResetStreamLink();
             } else {

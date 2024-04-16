@@ -6,7 +6,7 @@
 
 static StmLink stmLink;
 
-#define UART_RX_BUFFER_LENGTH 256
+#define UART_RX_BUFFER_LENGTH 512
 bool stmLinkUartParsePacket(uint8_t byte);
 void stmLinkRxTask(void *pvParameters) {
     size_t length;
@@ -41,11 +41,11 @@ void stmLinkInit() {
     uart_driver_install(UART_NUM_0, UART_RX_BUFFER_LENGTH, 0, 0, NULL, 0);
     uart_set_pin(UART_NUM_0, STM_TX_PIN, STM_RX_PIN, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE);
     stmLink.uartPort = UART_NUM_0;
-    xTaskCreatePinnedToCore(stmLinkRxTask, "stmLinkRxTask", 2048, NULL, 10, &stmLink.rxTaskHandle, 1);
+    xTaskCreatePinnedToCore(stmLinkRxTask, "stmLinkRxTask", 4096, NULL, 10, &stmLink.rxTaskHandle, 1);
 }
 
 void stmLinkSendPacket(PodtpPacket *packet) {
-    static uint8_t buffer[PODTP_MAX_DATA_LEN + 9] = { PODTP_START_BYTE_1, PODTP_START_BYTE_2, 0 };
+    static uint8_t buffer[PODTP_MAX_DATA_LEN + 2 + 2 + 2 + 4] = { PODTP_START_BYTE_1, PODTP_START_BYTE_2, 0 };
     uint8_t check_sum[2] = { 0 };
     check_sum[0] = check_sum[1] = packet->length;
     buffer[2] = packet->length;
@@ -79,7 +79,7 @@ bool stmLinkSendReliablePacket(PodtpPacket *packet, int retry) {
         // printf("SR [%d]: p=%d, l=%d\n", i, packet->port, packet->length);
         stmLinkSendPacket(&stmLink.packetBufferTx);
         xQueueReceive(stmLink.ackQueue, packet, 1000);
-        if (packet->port == PODTP_PORT_OK) {
+        if (packet->port == PORT_ACK_OK) {
             stmLink.waitForAck = false;
             return true;
         }
