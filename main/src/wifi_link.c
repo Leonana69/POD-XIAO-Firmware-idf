@@ -132,6 +132,7 @@ void wifiInit(int8_t configIndex) {
     ESP_ERROR_CHECK(esp_wifi_init(&cfg));
 
     ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA));
+    ESP_ERROR_CHECK(esp_wifi_set_ps(WIFI_PS_NONE)); // Disable power saving mode
     ESP_ERROR_CHECK(esp_wifi_start());
 
     if (configIndex < 0 || configIndex > 2) {

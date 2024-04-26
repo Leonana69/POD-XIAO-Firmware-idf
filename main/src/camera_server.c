@@ -51,10 +51,10 @@ static camera_config_t initConfig = {
     .xclk_freq_hz = 20000000,
     .frame_size = FRAMESIZE_SVGA,
     .pixel_format = PIXFORMAT_JPEG, // for streaming
-    .grab_mode = CAMERA_GRAB_WHEN_EMPTY,
-    .fb_location = CAMERA_FB_IN_DRAM,
-    .jpeg_quality = 12,
-    .fb_count = 1
+    .fb_location = CAMERA_FB_IN_PSRAM,
+    .jpeg_quality = 6,
+    .fb_count = 2,
+    .grab_mode = CAMERA_GRAB_LATEST
 };
 
 void cameraConfig(_camera_config_t *config) {
