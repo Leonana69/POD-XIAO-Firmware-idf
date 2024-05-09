@@ -48,7 +48,7 @@ static camera_config_t initConfig = {
     .pin_sccb_scl = SIOC_GPIO_NUM,
     .pin_pwdn = PWDN_GPIO_NUM,
     .pin_reset = RESET_GPIO_NUM,
-    .xclk_freq_hz = 22000000,
+    .xclk_freq_hz = 20000000,
     .frame_size = FRAMESIZE_HD,
     .pixel_format = PIXFORMAT_JPEG, // for streaming
     .fb_location = CAMERA_FB_IN_PSRAM,
@@ -94,5 +94,5 @@ void cameraInit() {
     sensor_t *s = esp_camera_sensor_get();
     // initial sensors are flipped vertically and colors are a bit saturated
     printf("Camera id: 0x%x\n", s->id.PID);
-    xTaskCreatePinnedToCore(cameraServerTask, "camera_server_task", 4096, NULL, 15, NULL, 0);
+    xTaskCreatePinnedToCore(cameraServerTask, "camera_server_task", 8192, NULL, 15, NULL, 0);
 }

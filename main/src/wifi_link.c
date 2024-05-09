@@ -134,6 +134,8 @@ void wifiInit(int8_t configIndex) {
     ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA));
     ESP_ERROR_CHECK(esp_wifi_set_ps(WIFI_PS_NONE)); // Disable power saving mode
     ESP_ERROR_CHECK(esp_wifi_start());
+    ESP_ERROR_CHECK(esp_wifi_set_channel(8, WIFI_SECOND_CHAN_NONE));
+    ESP_ERROR_CHECK(esp_wifi_set_bandwidth(ESP_IF_WIFI_STA, WIFI_BW_HT40));
 
     if (configIndex < 0 || configIndex > 2) {
         configIndex = wifiScan();
@@ -249,6 +251,8 @@ void wifiLinkResetStreamLink() {
         close(streamLink.client_socket);
 }
 
+// static bool udpInit = false;
+static int count = 0;
 void wifiLinkSendImage(uint8_t *data, uint32_t length) {
     if (!streamLink.connected) {
         int client_sock = accept(streamLink.socket, (struct sockaddr *)&(streamLink.client_addr), &(streamLink.client_addr_len));
@@ -259,7 +263,13 @@ void wifiLinkSendImage(uint8_t *data, uint32_t length) {
         streamLink.connected = true;
         streamLink.client_socket = client_sock;
     }
+
     wifiLinkSendData(&streamLink, data, length);
+    if (count++ % 30 == 0) {
+        wifi_ap_record_t ap_info;
+        esp_wifi_sta_get_ap_info(&ap_info);
+        printf("RSSI: %d\n", ap_info.rssi);
+    }
 }
 
 void wifiLinkRxTask(void* pvParameters) {
