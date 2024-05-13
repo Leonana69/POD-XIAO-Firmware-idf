@@ -45,7 +45,7 @@ void stmLinkInit() {
 }
 
 void stmLinkSendPacket(PodtpPacket *packet) {
-    static uint8_t buffer[PODTP_MAX_DATA_LEN + 2 + 2 + 2 + 4] = { PODTP_START_BYTE_1, PODTP_START_BYTE_2, 0 };
+    static uint8_t buffer[2 + 1 + 1 + PODTP_MAX_DATA_LEN + 2 + 5] = { PODTP_START_BYTE_1, PODTP_START_BYTE_2, 0 };
     uint8_t check_sum[2] = { 0 };
     check_sum[0] = check_sum[1] = packet->length;
     buffer[2] = packet->length;
@@ -58,7 +58,8 @@ void stmLinkSendPacket(PodtpPacket *packet) {
     buffer[packet->length + 4] = check_sum[1];
     // add tail to reset the state machine
     *(uint32_t *) &buffer[packet->length + 5] = 0x0A0D0A0D;
-    uart_write_bytes(stmLink.uartPort, (const char *)buffer, packet->length + 9);
+    buffer[packet->length + 9] = 0x0A;
+    uart_write_bytes(stmLink.uartPort, (const char *)buffer, packet->length + 10);
 }
 
 bool stmLinkAckQueuePut(PodtpPacket *packet) {

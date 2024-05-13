@@ -25,6 +25,5 @@ void app_main(void) {
     stmLinkInit();
     cameraInit();
     
-    bootSTM32Bootloader();
 	bootSTM32Firmware();
 }
