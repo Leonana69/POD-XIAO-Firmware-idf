@@ -133,10 +133,11 @@ void wifiInit(int8_t configIndex) {
 
     ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA));
     ESP_ERROR_CHECK(esp_wifi_set_ps(WIFI_PS_NONE)); // Disable power saving mode
-    ESP_ERROR_CHECK(esp_wifi_start());
-    ESP_ERROR_CHECK(esp_wifi_set_channel(8, WIFI_SECOND_CHAN_NONE));
-    ESP_ERROR_CHECK(esp_wifi_set_bandwidth(ESP_IF_WIFI_STA, WIFI_BW_HT40));
 
+    ESP_ERROR_CHECK(esp_wifi_start());
+    ESP_ERROR_CHECK(esp_wifi_set_channel(7, WIFI_SECOND_CHAN_NONE));
+    ESP_ERROR_CHECK(esp_wifi_set_bandwidth(ESP_IF_WIFI_STA, WIFI_BW_HT40));
+    
     if (configIndex < 0 || configIndex > 2) {
         configIndex = wifiScan();
     }
@@ -257,8 +258,10 @@ void wifiLinkSendImage(uint8_t *data, uint32_t length) {
     if (!streamLink.connected) {
         int client_sock = accept(streamLink.socket, (struct sockaddr *)&(streamLink.client_addr), &(streamLink.client_addr_len));
         if (client_sock < 0) {
-            printf("Accept failed\n");
+            printf("Stream connection [FAILED]\n");
             return;
+        } else {
+            printf("Stream connection [OK]\n");
         }
         streamLink.connected = true;
         streamLink.client_socket = client_sock;
