@@ -248,7 +248,7 @@ void wifiLinkSendPacket(PodtpPacket *packet) {
 
 void wifiLinkEnableStream(bool enable) {
     streamLink.enabled = enable;
-    streamLink.client_addr.sin_addr.s_addr = inet_addr("192.168.8.119");
+    streamLink.client_addr.sin_addr.s_addr = controlLink.client_addr.sin_addr.s_addr;
 }
 
 static uint16_t count = 0;
@@ -286,7 +286,9 @@ void wifiLinkSendImage(uint8_t *data, uint32_t length) {
         sendto(streamLink.socket, (const char *)&image_packet, image_packet.size + IMAGE_HEADER_SIZE, 0, (struct sockaddr *)&streamLink.client_addr, streamLink.client_addr_len);
     }
 
-    if (count++ % 30 == 0) {
+    count += 1;
+
+    if (count % 30 == 0) {
         wifi_ap_record_t ap_info;
         esp_wifi_sta_get_ap_info(&ap_info);
         printf("RSSI: %d\n", ap_info.rssi);
@@ -349,6 +351,7 @@ bool tcpLinkInit(WifiLink *self, uint16_t port) {
         return false;
     }
 
+    self->client_addr_len = sizeof(self->client_addr);
     // Listen for incoming connections
     if (listen(self->socket, 1) < 0) {
         printf("Socket listen failed");
