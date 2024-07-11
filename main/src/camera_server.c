@@ -53,7 +53,7 @@ static camera_config_t initConfig = {
     .grab_mode = CAMERA_GRAB_LATEST
 };
 
-void cameraConfig(_camera_config_t *config) {
+void cameraConfig(_camera_config_t *config) {  
     sensor_t *s = esp_camera_sensor_get();
     if (s == NULL && config->on) {
         esp_err_t err = esp_camera_init(&initConfig);
