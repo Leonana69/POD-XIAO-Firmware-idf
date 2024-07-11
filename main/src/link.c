@@ -58,9 +58,9 @@ void linkProcessPacket(PodtpPacket *packet) {
                     printf("[OK]\n");
                     cameraConfig((_camera_config_t *) &packet->data[0]);
                 }
-            } else if (packet->port == PORT_ESP32_RESET_STREAM_LINK) {
-                printf("Reset Stream Link\n");
-                wifiLinkResetStreamLink();
+            } else if (packet->port == ESP32_ENABLE_STREAM) {
+                printf("Enable Stream: %d\n", packet->data[0]);
+                wifiLinkEnableStream(packet->data[0] == 1);
             } else {
                 printf("Unknown ESP32 packet: p=%d, l=%d\n", packet->port, packet->length);
             }

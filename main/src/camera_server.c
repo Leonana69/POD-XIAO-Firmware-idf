@@ -5,8 +5,6 @@
 #define CAMERA_MODEL_XIAO_ESP32S3 // Has PSRAM
 #include "camera_pins.h"
 
-static uint8_t header[6] = { CAMERA_START_BYTE_1, CAMERA_START_BYTE_2, 0 };
-
 void cameraServerTask(void *pvParameters) {
     camera_fb_t * fb = NULL;
     int count = 0;
@@ -17,8 +15,6 @@ void cameraServerTask(void *pvParameters) {
             continue;
         }
 
-        *((uint32_t *) &header[2]) = fb->len;
-        wifiLinkSendImage(header, 6);
         wifiLinkSendImage(fb->buf, fb->len);
         
         if (fb) {

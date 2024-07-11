@@ -30,7 +30,7 @@ typedef struct {
     int client_socket;
     struct sockaddr_in client_addr;
     socklen_t client_addr_len;
-    bool connected;
+    bool enabled;
     TaskHandle_t rx_task_handle;
     PacketBuffer tx_buffer;
     PodtpPacket rx_packet;
@@ -40,7 +40,7 @@ typedef struct {
 void wifiInit(int8_t configIndex);
 void wifiLinkInit();
 void wifiLinkSendPacket(PodtpPacket *packet);
-void wifiLinkResetStreamLink();
+void wifiLinkEnableStream(bool enable);
 void wifiLinkSendImage(uint8_t *data, uint32_t length);
 
 #endif // __WIFI_LINK_H__

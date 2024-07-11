@@ -223,7 +223,7 @@ static bool wifiParsePacket(uint8_t byte) {
 }
 
 static void wifiLinkSendData(WifiLink *self, uint8_t *data, uint32_t length) {
-    if (!self->connected) {
+    if (!self->enabled) {
         return;
     }
     send(self->client_socket, data, length, 0);
@@ -232,7 +232,7 @@ static void wifiLinkSendData(WifiLink *self, uint8_t *data, uint32_t length) {
 void wifiLinkSendPacket(PodtpPacket *packet) {
     static uint8_t buffer[PODTP_MAX_DATA_LEN + 4] = { PODTP_START_BYTE_1, PODTP_START_BYTE_2, 0 };
     PacketBufferPush(&controlLink.tx_buffer, packet);
-    if (!controlLink.connected) {
+    if (!controlLink.enabled) {
         return;
     }
 
@@ -246,28 +246,46 @@ void wifiLinkSendPacket(PodtpPacket *packet) {
     }
 }
 
-void wifiLinkResetStreamLink() {
-    streamLink.connected = false;
-    if (streamLink.client_socket >= 0)
-        close(streamLink.client_socket);
+void wifiLinkEnableStream(bool enable) {
+    streamLink.enabled = enable;
+    streamLink.client_addr.sin_addr.s_addr = inet_addr("192.168.8.119");
 }
 
-// static bool udpInit = false;
-static int count = 0;
+static uint16_t count = 0;
+#define IMAGE_PACKET_SIZE 1024
+#define IMAGE_HEADER_SIZE 8
+#define IMAGE_PAYLOAD_SIZE (IMAGE_PACKET_SIZE - IMAGE_HEADER_SIZE)
+
+typedef struct {
+    union {
+        struct {
+            uint16_t seq;
+            uint16_t index;
+            uint16_t total;
+            uint16_t size;
+        };
+        uint8_t raw[IMAGE_HEADER_SIZE];
+    };
+    uint8_t data[IMAGE_PAYLOAD_SIZE];
+} ImagePacket;
+
+static ImagePacket image_packet;
+
 void wifiLinkSendImage(uint8_t *data, uint32_t length) {
-    if (!streamLink.connected) {
-        int client_sock = accept(streamLink.socket, (struct sockaddr *)&(streamLink.client_addr), &(streamLink.client_addr_len));
-        if (client_sock < 0) {
-            printf("Stream connection [FAILED]\n");
-            return;
-        } else {
-            printf("Stream connection [OK]\n");
-        }
-        streamLink.connected = true;
-        streamLink.client_socket = client_sock;
+    if (!streamLink.enabled) {
+        return;
     }
 
-    wifiLinkSendData(&streamLink, data, length);
+    int packet_count = (length + IMAGE_PAYLOAD_SIZE - 1) / IMAGE_PAYLOAD_SIZE;
+    for (int i = 0; i < packet_count; i++) {
+        image_packet.seq = count;
+        image_packet.index = i;
+        image_packet.total = packet_count;
+        image_packet.size = (i == packet_count - 1) ? length % IMAGE_PAYLOAD_SIZE : IMAGE_PAYLOAD_SIZE;
+        memcpy(image_packet.data, data + i * IMAGE_PAYLOAD_SIZE, image_packet.size);
+        sendto(streamLink.socket, (const char *)&image_packet, image_packet.size + IMAGE_HEADER_SIZE, 0, (struct sockaddr *)&streamLink.client_addr, streamLink.client_addr_len);
+    }
+
     if (count++ % 30 == 0) {
         wifi_ap_record_t ap_info;
         esp_wifi_sta_get_ap_info(&ap_info);
@@ -285,19 +303,19 @@ void wifiLinkRxTask(void* pvParameters) {
             printf("Accept failed\n");
             continue;
         }
-        self->connected = true;
+        self->enabled = true;
         self->client_socket = client_sock;
 
-        while (self->connected) {
+        while (self->enabled) {
             int len = recv(client_sock, rx_buffer, sizeof(rx_buffer) - 1, 0);
 
             if (len < 0) {
                 printf("Receive failed\n");
-                self->connected = false;
+                self->enabled = false;
                 break;
             } else if (len == 0) {
                 printf("Connection closed\n");
-                self->connected = false;
+                self->enabled = false;
                 break;
             } else {
                 for (int i = 0; i < len; i++) {
@@ -312,7 +330,7 @@ void wifiLinkRxTask(void* pvParameters) {
 }
 
 bool tcpLinkInit(WifiLink *self, uint16_t port) {
-    self->socket = socket(AF_INET, SOCK_STREAM, 0);
+    self->socket = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
     if (self->socket < 0) {
         printf("Cannot open socket");
         return false;
@@ -340,6 +358,20 @@ bool tcpLinkInit(WifiLink *self, uint16_t port) {
     return true;
 }
 
+bool udpLinkInit(WifiLink *self, uint16_t port) {
+    self->socket = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
+    if (self->socket < 0) {
+        printf("Cannot open socket");
+        return false;
+    }
+
+    self->client_addr.sin_family = AF_INET;
+    self->client_addr.sin_addr.s_addr = htonl(INADDR_ANY);
+    self->client_addr.sin_port = htons(port);
+    self->client_addr_len = sizeof(self->client_addr);
+    return true;
+}
+
 void wifiLinkInit() {
     if (!wifiConnected)
         return;
@@ -351,7 +383,7 @@ void wifiLinkInit() {
         printf("Create Control TCP [FAILED]\n");
     }
 
-    if (!tcpLinkInit(&streamLink, 81)) {
-        printf("Create Stream TCP [FAILED]\n");
+    if (!udpLinkInit(&streamLink, 81)) {
+        printf("Create Stream UDP [FAILED]\n");
     }
 }
