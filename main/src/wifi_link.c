@@ -42,7 +42,7 @@ bool PacketBufferEmpty(PacketBuffer* buffer) {
 wifi_config_t wifiConfigs[3] = {
     {
         .sta = {
-            .ssid = "YECL-GL",
+            .ssid = "YECL-DEMO",
             .password = "64221771",
         },
     },
@@ -135,7 +135,7 @@ void wifiInit(int8_t configIndex) {
     ESP_ERROR_CHECK(esp_wifi_set_ps(WIFI_PS_NONE)); // Disable power saving mode
 
     ESP_ERROR_CHECK(esp_wifi_start());
-    ESP_ERROR_CHECK(esp_wifi_set_channel(7, WIFI_SECOND_CHAN_NONE));
+    // ESP_ERROR_CHECK(esp_wifi_set_channel(8, WIFI_SECOND_CHAN_NONE));
     ESP_ERROR_CHECK(esp_wifi_set_bandwidth(ESP_IF_WIFI_STA, WIFI_BW_HT40));
     
     if (configIndex < 0 || configIndex > 2) {
