@@ -32,6 +32,7 @@ typedef struct {
     socklen_t client_addr_len;
     bool enabled;
     TaskHandle_t rx_task_handle;
+    TaskHandle_t tx_task_handle;
     PacketBuffer tx_buffer;
     PodtpPacket rx_packet;
     // Add other members as needed

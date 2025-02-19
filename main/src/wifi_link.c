@@ -230,19 +230,29 @@ static void wifiLinkSendData(WifiLink *self, uint8_t *data, uint32_t length) {
 }
 
 void wifiLinkSendPacket(PodtpPacket *packet) {
-    static uint8_t buffer[PODTP_MAX_DATA_LEN + 4] = { PODTP_START_BYTE_1, PODTP_START_BYTE_2, 0 };
     PacketBufferPush(&controlLink.tx_buffer, packet);
-    if (!controlLink.enabled) {
-        return;
-    }
+}
 
-    while (!PacketBufferEmpty(&controlLink.tx_buffer)) {
-        PodtpPacket *p = PacketBufferPop(&controlLink.tx_buffer);
-        buffer[2] = p->length;
-        for (uint8_t i = 0; i < p->length; i++) {
-            buffer[i + 3] = p->raw[i];
+void wifiLinkTxTask(void* pvParameters) {
+    static uint8_t buffer[PODTP_MAX_DATA_LEN + 4]; // Reserve space for start bytes, length, and data
+    WifiLink *self = (WifiLink *)pvParameters;
+    
+    while (true) {
+        if (!PacketBufferEmpty(&self->tx_buffer)) {
+            PodtpPacket *packet = PacketBufferPop(&self->tx_buffer);
+            
+            // Construct the packet directly in the buffer
+            buffer[0] = PODTP_START_BYTE_1;
+            buffer[1] = PODTP_START_BYTE_2;
+            buffer[2] = packet->length;
+            
+            // Copy the packet data directly into the buffer
+            memcpy(&buffer[3], packet->raw, packet->length);
+            
+            // Send the entire buffer
+            wifiLinkSendData(self, buffer, packet->length + 3);
         }
-        wifiLinkSendData(&controlLink, buffer, p->length + 3);
+        vTaskDelay(10);
     }
 }
 
@@ -380,8 +390,9 @@ void wifiLinkInit() {
         return;
 
     if (tcpLinkInit(&controlLink, 80)) {
-        // Create the Rx task
+        // Create the Rx and Tx task
         xTaskCreatePinnedToCore(wifiLinkRxTask, "control_link_rx_task", 4096, &controlLink, 5, &controlLink.rx_task_handle, 1);
+        xTaskCreatePinnedToCore(wifiLinkTxTask, "control_link_tx_task", 4096, &controlLink, 5, &controlLink.tx_task_handle, 1);
     } else {
         printf("Create Control TCP [FAILED]\n");
     }
