@@ -82,6 +82,14 @@ static void event_handler(void* arg, esp_event_base_t event_base,
         printf("Get IP: " IPSTR "\n", IP2STR(&event->ip_info.ip));
         s_retry_num = 0;
         xEventGroupSetBits(s_wifi_event_group, WIFI_CONNECTED_BIT);
+
+        // Get the signal strength (RSSI)
+        wifi_ap_record_t ap_info;
+        if (esp_wifi_sta_get_ap_info(&ap_info) == ESP_OK) {
+            printf("Signal Strength (RSSI): %d dBm\n", ap_info.rssi);
+        } else {
+            printf("Failed to get signal strength\n");
+        }
     }
 }
 
@@ -133,10 +141,10 @@ void wifiInit(int8_t configIndex) {
 
     ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA));
     ESP_ERROR_CHECK(esp_wifi_set_ps(WIFI_PS_NONE)); // Disable power saving mode
-
+    
     ESP_ERROR_CHECK(esp_wifi_start());
     // ESP_ERROR_CHECK(esp_wifi_set_channel(8, WIFI_SECOND_CHAN_NONE));
-    ESP_ERROR_CHECK(esp_wifi_set_bandwidth(ESP_IF_WIFI_STA, WIFI_BW_HT40));
+    ESP_ERROR_CHECK(esp_wifi_set_bandwidth(ESP_IF_WIFI_STA, WIFI_BW_HT20));
     
     if (configIndex < 0 || configIndex > 2) {
         configIndex = wifiScan();
@@ -252,7 +260,7 @@ void wifiLinkTxTask(void* pvParameters) {
             // Send the entire buffer
             wifiLinkSendData(self, buffer, packet->length + 3);
         }
-        vTaskDelay(10);
+        vTaskDelay(1);
     }
 }
 
@@ -385,6 +393,17 @@ bool udpLinkInit(WifiLink *self, uint16_t port) {
     return true;
 }
 
+void wifiRSSITask() {
+    while (true) {
+        if (wifiConnected) {
+            wifi_ap_record_t ap_info;
+            esp_wifi_sta_get_ap_info(&ap_info);
+            printf("RSSI: %d\n", ap_info.rssi);
+        }
+        vTaskDelay(1000);
+    }
+}
+
 void wifiLinkInit() {
     if (!wifiConnected)
         return;
@@ -393,6 +412,7 @@ void wifiLinkInit() {
         // Create the Rx and Tx task
         xTaskCreatePinnedToCore(wifiLinkRxTask, "control_link_rx_task", 4096, &controlLink, 5, &controlLink.rx_task_handle, 1);
         xTaskCreatePinnedToCore(wifiLinkTxTask, "control_link_tx_task", 4096, &controlLink, 5, &controlLink.tx_task_handle, 1);
+        // xTaskCreatePinnedToCore(wifiRSSITask, "wifi_rssi_task", 4096, NULL, 5, NULL, 1);
     } else {
         printf("Create Control TCP [FAILED]\n");
     }
