@@ -6,4 +6,8 @@ idf_component_register(
          "src/stm_link.c"
          "src/link.c"
          "src/camera_server.c"
-    INCLUDE_DIRS "include")
+         "src/loco.c"
+         "libdw1000/src/libdw1000.c"
+         "libdw1000/src/libdw1000Spi.c"
+    INCLUDE_DIRS "include"
+                 "libdw1000/include")

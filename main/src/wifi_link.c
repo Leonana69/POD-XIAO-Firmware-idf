@@ -305,12 +305,6 @@ void wifiLinkSendImage(uint8_t *data, uint32_t length) {
     }
 
     count += 1;
-
-    if (count % 30 == 0) {
-        wifi_ap_record_t ap_info;
-        esp_wifi_sta_get_ap_info(&ap_info);
-        printf("RSSI: %d\n", ap_info.rssi);
-    }
 }
 
 void wifiLinkRxTask(void* pvParameters) {

@@ -15,6 +15,7 @@
 #include "wifi_link.h"
 #include "stm_link.h"
 #include "camera_server.h"
+#include "loco.h"
 
 void app_main(void) {
     printf("Hello, world!\n");
@@ -24,6 +25,7 @@ void app_main(void) {
     wifiLinkInit();
     stmLinkInit();
     cameraInit();
+    dw1000_init();
     
 	bootSTM32Firmware();
 }
