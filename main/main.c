@@ -18,7 +18,7 @@
 #include "loco.h"
 
 void app_main(void) {
-    printf("Hello, world!\n");
+    printf("System Starting...\n");
     bootInit();
     buttonInit();
     wifiInit(-1);

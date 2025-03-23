@@ -404,8 +404,8 @@ void wifiLinkInit() {
 
     if (tcpLinkInit(&controlLink, 80)) {
         // Create the Rx and Tx task
-        xTaskCreatePinnedToCore(wifiLinkRxTask, "control_link_rx_task", 4096, &controlLink, 5, &controlLink.rx_task_handle, 1);
-        xTaskCreatePinnedToCore(wifiLinkTxTask, "control_link_tx_task", 4096, &controlLink, 5, &controlLink.tx_task_handle, 1);
+        xTaskCreatePinnedToCore(wifiLinkRxTask, "control_link_rx_task", 4096, &controlLink, 6, &controlLink.rx_task_handle, 1);
+        xTaskCreatePinnedToCore(wifiLinkTxTask, "control_link_tx_task", 4096, &controlLink, 6, &controlLink.tx_task_handle, 1);
         // xTaskCreatePinnedToCore(wifiRSSITask, "wifi_rssi_task", 4096, NULL, 5, NULL, 1);
     } else {
         printf("Create Control TCP [FAILED]\n");

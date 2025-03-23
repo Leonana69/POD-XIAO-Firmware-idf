@@ -7,7 +7,7 @@
 void linkProcessPacket(PodtpPacket *packet) {
     switch (packet->type) {
         case PODTP_TYPE_ACK:
-            printf("ACK: %s\n", packet->port == PORT_ACK_OK ? "OK" : "ERROR");
+            // printf("ACK: %s\n", packet->port == PORT_ACK_OK ? "OK" : "ERROR");
             if (!stmLinkAckQueuePut(packet)) {
                 printf("ACK forward to WiFi\n");
                 wifiLinkSendPacket(packet);
@@ -16,7 +16,7 @@ void linkProcessPacket(PodtpPacket *packet) {
 
         case PODTP_TYPE_COMMAND:
         case PODTP_TYPE_CTRL:
-            printf("CO/CT: (%d, %d, %d)\n", packet->type, packet->port, packet->length);
+            // printf("CO/CT: (%d, %d, %d)\n", packet->type, packet->port, packet->length);
             if (packet->ack == true) {
                 stmLinkSendReliablePacket(packet, 5);
                 wifiLinkSendPacket(packet);
@@ -25,7 +25,7 @@ void linkProcessPacket(PodtpPacket *packet) {
             break;
 
         case PODTP_TYPE_LOG:
-            printf("LOG: (%d, %d)\n", packet->port, packet->length);
+            // printf("LOG: (%d, %d)\n", packet->port, packet->length);
             wifiLinkSendPacket(packet);
             break;
 

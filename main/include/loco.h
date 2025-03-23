@@ -21,7 +21,7 @@ struct vec3_s {
 typedef struct vec3_s point_t;
 
 #include "libdw1000.h"
-#define LOCODECK_NR_OF_TDOA2_ANCHORS 2
+#define LOCODECK_NR_OF_TDOA2_ANCHORS 8
 // Timestamp counter frequency
 #define LOCODECK_TS_FREQ (499.2e6 * 128)
 
@@ -45,6 +45,12 @@ typedef enum {
     lpsMode_TDoA2 = 2,
     lpsMode_TDoA3 = 3,
 } lpsMode_t;
+
+typedef struct {
+    uint8_t dest;
+    uint8_t length;
+    uint8_t data[30];
+} lpsLppShortPacket_t;
 
 typedef struct {
     // The status of anchors. A bit field (bit 0 - anchor 0, bit 1 - anchor 1 and so on)

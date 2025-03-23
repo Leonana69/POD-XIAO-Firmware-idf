@@ -41,7 +41,7 @@ void stmLinkInit() {
     uart_driver_install(UART_NUM_0, UART_RX_BUFFER_LENGTH, 0, 0, NULL, 0);
     uart_set_pin(UART_NUM_0, STM_TX_PIN, STM_RX_PIN, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE);
     stmLink.uartPort = UART_NUM_0;
-    xTaskCreatePinnedToCore(stmLinkRxTask, "stmLinkRxTask", 4096, NULL, 10, &stmLink.rxTaskHandle, 1);
+    xTaskCreatePinnedToCore(stmLinkRxTask, "stmLinkRxTask", 4096, NULL, 7, &stmLink.rxTaskHandle, 1);
 }
 
 void stmLinkSendPacket(PodtpPacket *packet) {

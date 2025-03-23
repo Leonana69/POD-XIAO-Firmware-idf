@@ -4,11 +4,19 @@
 #include "loco.h"
 #include "driver/gpio.h"
 #include "libdw1000.h"
+#include "tdoa2.h"
 
 static spi_device_handle_t spi_handle;
 static bool isInit = false;
 dwDevice_t dwm_device;
 dwDevice_t *dwm = &dwm_device;
+
+static uint32_t timeout;
+static uwbAlgorithm_t *uwbAlgorithm = &uwbTdoa2TagAlgorithm;
+
+TaskHandle_t uwbTaskHandle;
+static void uwbInterruptHandler(void *arg);
+static void uwbTask(void *pvParameters);
 
 /// @brief SPI and GPIO setup ///
 void init_spi() {
@@ -47,7 +55,7 @@ void init_spi() {
     printf("SPI Init [OK]\n");
 }
 
-void init_irq() {
+void init_irq_rst() {
     esp_err_t ret;
     gpio_config_t io_conf = {
         .pin_bit_mask = (1ULL << PIN_NUM_IRQ),
@@ -63,10 +71,17 @@ void init_irq() {
         return;
     }
 
+    ret = gpio_install_isr_service(ESP_INTR_FLAG_EDGE);
+    ret |= gpio_isr_handler_add(PIN_NUM_IRQ, uwbInterruptHandler, NULL);
+    if (ret != ESP_OK) {
+        printf("Install ISR [FAILED]");
+        return;
+    }
+
     // Configure GPIO for reset pin
     gpio_config_t rst_conf = {
         .pin_bit_mask = (1ULL << PIN_NUM_RST),
-        .mode = GPIO_MODE_OUTPUT,
+        .mode = GPIO_MODE_OUTPUT_OD,
         .pull_up_en = GPIO_PULLUP_DISABLE,
         .pull_down_en = GPIO_PULLDOWN_DISABLE,
         .intr_type = GPIO_INTR_DISABLE
@@ -114,10 +129,6 @@ static void spiRead(dwDevice_t* dev, const void *header, size_t headerLength,
     }
 
     memcpy(data, spiRxBuffer + headerLength, dataLength);
-    for (int i = 0; i < dataLength; i++) {
-        printf("%02x ", ((uint8_t*)data)[i]);
-    }
-    printf("\n");
 }
 
 static void spiSetSpeed(dwDevice_t* dev, dwSpiSpeed_t speed) {
@@ -224,46 +235,59 @@ static dwOps_t dwOps = {
 //     return MAX_TIMEOUT;
 // }
 
+static void txCallback(dwDevice_t *dev) {
+    timeout = uwbAlgorithm->onEvent(dev, eventPacketSent);
+}
+
+static void rxCallback(dwDevice_t *dev) {
+    timeout = uwbAlgorithm->onEvent(dev, eventPacketReceived);
+}
+
+static void rxTimeoutCallback(dwDevice_t *dev) {
+    timeout = uwbAlgorithm->onEvent(dev, eventReceiveTimeout);
+}
+
+static void rxFailedCallback(dwDevice_t *dev) {
+    timeout = uwbAlgorithm->onEvent(dev, eventReceiveFailed);
+}
+
 /// @brief dw1000 setup ///
 void dw1000_init() {
-    init_irq();
     init_spi();
+    init_irq_rst();
+    
     // Reset the DW1000
     gpio_set_level(PIN_NUM_RST, 0);
     vTaskDelay(10);
+
+    // TODO: check the pin status with oscilloscope
     gpio_set_level(PIN_NUM_RST, 1);
     vTaskDelay(20);
 
     dwInit(dwm, &dwOps);
-
-    dwSetSpiEdge(dwm, true);
-    vTaskDelay(10);
 
     int ret = dwConfigure(dwm);
     if (ret != 0) {
         isInit = false;
         printf("Failed to configure DW1000\n");
         return;
-    } else {
-        printf("DW1000 configured successfully\n");
     }
-
-    return;
 
     dwEnableAllLeds(dwm);
 
     dwTime_t delay = {.full = 0};
     dwSetAntenaDelay(dwm, delay);
 
-    // dwAttachSentHandler(dwm, txCallback);
-    // dwAttachReceivedHandler(dwm, rxCallback);
-    // dwAttachReceiveFailedHandler(dwm, rxCallback);
-    // dwAttachReceiveTimeoutHandler(dwm, rxCallback);
+    dwAttachSentHandler(dwm, txCallback);
+    dwAttachReceivedHandler(dwm, rxCallback);
+    dwAttachReceiveFailedHandler(dwm, rxFailedCallback);
+    dwAttachReceiveTimeoutHandler(dwm, rxTimeoutCallback);
 
     dwNewConfiguration(dwm);
     dwSetDefaults(dwm);
 
     // set the mode for different ranging
+    // dwEnableMode(dwm, MODE_SHORTDATA_MID_ACCURACY);
     dwEnableMode(dwm, MODE_SHORTDATA_FAST_ACCURACY);
 
     dwSetChannel(dwm, CHANNEL_2);
@@ -274,5 +298,36 @@ void dw1000_init() {
     dwSetReceiveWaitTimeout(dwm, 10000);
     dwCommitConfiguration(dwm);
 
+    // memoryRegisterHandler(&memDef);
+    // algoSemaphore= xSemaphoreCreateMutex();
+    // xTaskCreate(uwbTask, LPS_DECK_TASK_NAME, LPS_DECK_STACKSIZE, NULL,
+    //                 LPS_DECK_TASK_PRI, &uwbTaskHandle);
+
+    xTaskCreatePinnedToCore(uwbTask, "loco_service_task", 8192, NULL, 20, &uwbTaskHandle, 1);
+    printf("DW1000 Init [OK]\n");
     isInit = true;
+}
+
+void uwbInterruptHandler(void *arg) {
+    BaseType_t xHigherPriorityTaskWoken = pdFALSE;
+    xTaskNotifyFromISR(uwbTaskHandle, 0, eNoAction, &xHigherPriorityTaskWoken);
+    if (xHigherPriorityTaskWoken) {
+        portYIELD_FROM_ISR();
+    }
+}
+
+void uwbTask(void *pvParameters) {
+    uwbAlgorithm->init(dwm);
+    uwbAlgorithm->onEvent(dwm, eventTimeout);
+
+    while (true) {
+        BaseType_t ret = xTaskNotifyWait(0, 0, NULL, portMAX_DELAY);
+        if (ret == pdTRUE) {
+            do {
+                dwHandleInterrupt(dwm);
+            } while (gpio_get_level(PIN_NUM_IRQ) == 1);
+        } else {
+            uwbAlgorithm->onEvent(dwm, eventTimeout);
+        }
+    }
 }
