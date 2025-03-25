@@ -30,8 +30,10 @@ void init_spi() {
     buscfg.max_transfer_sz = 4096;
     esp_err_t ret = spi_bus_initialize(SPI_HOST, &buscfg, SPI_DMA_CH_AUTO);
     if (ret != ESP_OK) {
-        printf("Initialize SPI bus [FAILED]\n");
+        printf("Initialize SPI2 bus [FAILED]\n");
         return;
+    } else {
+        printf("Initialize SPI2 bus [OK]\n");
     }
 
     // Configure SPI device interface
@@ -303,7 +305,7 @@ void dw1000_init() {
     // xTaskCreate(uwbTask, LPS_DECK_TASK_NAME, LPS_DECK_STACKSIZE, NULL,
     //                 LPS_DECK_TASK_PRI, &uwbTaskHandle);
 
-    xTaskCreatePinnedToCore(uwbTask, "loco_service_task", 8192, NULL, 20, &uwbTaskHandle, 1);
+    xTaskCreatePinnedToCore(uwbTask, "loco_service_task", 8192, NULL, 20, &uwbTaskHandle, 0);
     printf("DW1000 Init [OK]\n");
     isInit = true;
 }

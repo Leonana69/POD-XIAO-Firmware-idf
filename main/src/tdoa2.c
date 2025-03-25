@@ -59,6 +59,8 @@ static uint64_t _trunc(uint64_t value) {
 }
 
 static bool rxCallback(dwDevice_t *dev) {
+    static int debug_count = 0;
+
     int dataLength = dwGetDataLength(dev);
     packet_t rxPacket;
   
@@ -71,7 +73,6 @@ static bool rxCallback(dwDevice_t *dev) {
     
         dwTime_t arrival = {.full = 0};
         dwGetReceiveTimestamp(dev, &arrival);
-        printf("Received packet from anchor %d\n", anchor);
         
         if (anchor < LOCODECK_NR_OF_TDOA2_ANCHORS) {
             uint32_t now_ms = (uint32_t) xTaskGetTickCount();
@@ -99,11 +100,11 @@ static bool rxCallback(dwDevice_t *dev) {
             for (uint8_t remoteId = 0; remoteId < LOCODECK_NR_OF_TDOA2_ANCHORS; remoteId++) {
                 if (remoteId != anchor) {
                     int64_t remoteRxTime = packet->timestamps[remoteId];
-                    uint8_t remoetSeqNr = packet->sequenceNrs[remoteId] & 0x7f;
+                    uint8_t remoteSeqNr = packet->sequenceNrs[remoteId] & 0x7f;
                     
                     if (remoteRxTime != 0) {
                         anchorCtx.anchorInfo->remoteAnchorData[remoteId].id = remoteId;
-                        anchorCtx.anchorInfo->remoteAnchorData[remoteId].seqNr = remoetSeqNr;
+                        anchorCtx.anchorInfo->remoteAnchorData[remoteId].seqNr = remoteSeqNr;
                         anchorCtx.anchorInfo->remoteAnchorData[remoteId].rxTime = remoteRxTime;
                         anchorCtx.anchorInfo->remoteAnchorData[remoteId].endOfLife = now_ms + 30;
                     }
@@ -130,7 +131,7 @@ static bool rxCallback(dwDevice_t *dev) {
 
                 const double difference = clockCorrectionCandidate - clockCorrection;
                 if (difference < 0.03e-6 && difference > -0.03e-6) {
-                    clockCorrection = clockCorrection * 0.1 + clockCorrectionCandidate * 0.9;
+                    clockCorrection = clockCorrection * 0.9 + clockCorrectionCandidate * 0.1;
                     if (clockCorrectionBucket < 4)
                         clockCorrectionBucket++;
                 } else {
@@ -164,23 +165,25 @@ static bool rxCallback(dwDevice_t *dev) {
                 }
             }
 
-            if (youngestAnchorId == -1) {
-                printf("No valid anchor found\n");
-                return false;
+            if (youngestAnchorId != -1) {
+                otherAnchorCtx.anchorInfo = &anchorInfoArray[youngestAnchorId];
+                otherAnchorCtx.currentTime_ms = now_ms;
+
+                // Calculate the time of flight
+                const int64_t tof_Ar_to_An_in_cl_An = anchorCtx.anchorInfo->remoteTof[youngestAnchorId].tof;
+                const int64_t rxAr_by_An_in_cl_An = anchorCtx.anchorInfo->remoteAnchorData[youngestAnchorId].rxTime;
+                const int64_t rxAr_by_T_in_cl_T = otherAnchorCtx.anchorInfo->rxTime;
+                const int64_t delta_txAr_to_txAn_in_cl_An = tof_Ar_to_An_in_cl_An + _trunc(txAn_in_cl_An - rxAr_by_An_in_cl_An);
+                const double timeDiffOfArrival_in_cl_T = (double)_trunc(rxAn_by_T_in_cl_T - rxAr_by_T_in_cl_T) - clockCorrection * (double)delta_txAr_to_txAn_in_cl_An;
+                
+                const double distance = (double) timeDiffOfArrival_in_cl_T * SPEED_OF_LIGHT / (double)LOCODECK_TS_FREQ;
+
+                if (debug_count % 50 == 0 || debug_count % 50 == 1) {
+                    printf("Distance to anchor %d: %.2f\n", youngestAnchorId, distance);
+                    
+                }
+                debug_count++;
             }
-
-            otherAnchorCtx.anchorInfo = &anchorInfoArray[youngestAnchorId];
-            otherAnchorCtx.currentTime_ms = now_ms;
-
-            // Calculate the time of flight
-            const int64_t tof_Ar_to_An_in_cl_An = anchorCtx.anchorInfo->remoteTof[youngestAnchorId].tof;
-            const int64_t rxAr_by_An_in_cl_An = anchorCtx.anchorInfo->remoteAnchorData[youngestAnchorId].rxTime;
-            const int64_t rxAr_by_T_in_cl_T = otherAnchorCtx.anchorInfo->rxTime;
-            const int64_t delta_txAr_to_txAn_in_cl_An = tof_Ar_to_An_in_cl_An + _trunc(txAn_in_cl_An - rxAr_by_An_in_cl_An);
-            const int64_t timeDiffOfArrival_in_cl_T = _trunc(rxAn_by_T_in_cl_T - rxAr_by_T_in_cl_T) - delta_txAr_to_txAn_in_cl_An;
-            
-            const double distance = (double)timeDiffOfArrival_in_cl_T * SPEED_OF_LIGHT / (double)LOCODECK_TS_FREQ;
-            printf("Distance to anchor %d: %.2f\n", youngestAnchorId, distance);
 
             // Set the anchor status
             anchorCtx.anchorInfo->lastUpdateTime = now_ms;
@@ -191,7 +194,7 @@ static bool rxCallback(dwDevice_t *dev) {
             rangingOk = true;
         }
     }
-  
+
     return lppSent;
 }
 
@@ -234,15 +237,22 @@ static uint32_t onEvent(dwDevice_t *dev, uwbEvent_t event) {
 }
 
 static bool getAnchorPosition(const uint8_t anchorId, point_t* position) {
-    // tdoaAnchorContext_t anchorCtx;
-    // uint32_t now_ms = T2M(xTaskGetTickCount());
-
-    // bool contextFound = tdoaStorageGetAnchorCtx(tdoaEngineState.anchorInfoArray, anchorId, now_ms, &anchorCtx);
-    // if (contextFound) {
-    //     tdoaStorageGetAnchorPosition(&anchorCtx, position);
-    //     return true;
-    // }
-
+    // Example: Retrieve from a predefined array (replace with actual data)
+    const point_t anchorPositions[] = {
+        {0.0, 0.0, 0.0},   // Anchor 0
+        {1.0, 0.0, 0.0},   // Anchor 1
+        {1.0, 0.0, 0.0},   // Anchor 2
+        {1.0, 0.0, 0.0},   // Anchor 3
+        {1.0, 0.0, 0.0},   // Anchor 4
+        {1.0, 0.0, 0.0},   // Anchor 5
+        {1.0, 0.0, 0.0},   // Anchor 6
+        {1.0, 0.0, 0.0},   // Anchor 7
+        // ... Add other anchor positions
+    };
+    if (anchorId < LOCODECK_NR_OF_TDOA2_ANCHORS) {
+        *position = anchorPositions[anchorId];
+        return true;
+    }
     return false;
 }
   
