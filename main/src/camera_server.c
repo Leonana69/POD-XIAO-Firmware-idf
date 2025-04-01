@@ -90,5 +90,5 @@ void cameraInit() {
     sensor_t *s = esp_camera_sensor_get();
     // initial sensors are flipped vertically and colors are a bit saturated
     printf("Camera id: 0x%x\n", s->id.PID);
-    xTaskCreatePinnedToCore(cameraServerTask, "camera_server_task", 8192, NULL, 15, NULL, 0);
+    xTaskCreatePinnedToCore(cameraServerTask, "camera_server_task", 8192, NULL, 10, NULL, 0);
 }

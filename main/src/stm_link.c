@@ -48,7 +48,7 @@ void stmLinkTxTask(void *pvParameters) {
                 buffer[packet->length + 4] = check_sum[1];
                 // add tail to reset the state machine
                 *(uint32_t *) &buffer[packet->length + 5] = 0x0A0D0A0D;
-                uart_write_bytes(self->uartPort, (const char *)buffer, packet->length + 10);
+                uart_write_bytes(self->uartPort, (const char *)buffer, packet->length + 9);
             }
         }
     }

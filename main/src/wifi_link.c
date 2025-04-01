@@ -217,37 +217,15 @@ void wifiLinkTxTask(void* pvParameters) {
             // Construct the packet directly in the buffer
             buffer[0] = PODTP_START_BYTE_1;
             buffer[1] = PODTP_START_BYTE_2;
+            *(uint32_t *) &buffer[packet->length + 3] = 0x0A0D0A0D;
 
             // Send the entire buffer
-            if (self->enabled && send(self->clientSocket, buffer, packet->length + 3, 0) < 0) {
+            if (self->enabled && send(self->clientSocket, buffer, packet->length + 7, 0) < 0) {
                 printf("Error: Failed to send packet\n");
             }
         }
     }
 }
-
-// void wifiLinkTxTask(void* pvParameters) {
-//     static uint8_t buffer[PODTP_MAX_DATA_LEN + 8]; // Reserve space for start bytes, length, and data
-//     WifiLink *self = (WifiLink *)pvParameters;
-//     PodtpPacket packet; // Separate variable to hold the received packet
-
-//     while (true) {
-//         if (xQueueReceive(self->txQueue, &packet, portMAX_DELAY) == pdTRUE) {
-//             // Construct the packet in the buffer
-//             buffer[0] = PODTP_START_BYTE_1;
-//             buffer[1] = PODTP_START_BYTE_2;
-//             buffer[2] = packet.length;
-            
-//             // Copy the packet data into the buffer
-//             memcpy(&buffer[3], packet.raw, packet.length);
-
-//             // Send the entire buffer
-//             if (self->enabled && send(self->clientSocket, buffer, packet.length + 3, 0) < 0) {
-//                 printf("Error: Failed to send packet\n");
-//             }
-//         }
-//     }
-// }
 
 void wifiLinkEnableStream(bool enable) {
     streamLink.enabled = enable;
@@ -292,6 +270,8 @@ void wifiLinkSendImage(uint8_t *data, uint32_t length) {
             printf("Error: Failed to send image packet\n");
             break;
         }
+
+
     }
 
     image_count += 1;
@@ -381,7 +361,7 @@ void wifiRSSITask() {
         if (wifiConnected) {
             wifi_ap_record_t ap_info;
             esp_wifi_sta_get_ap_info(&ap_info);
-            printf("RSSI: %d\n", ap_info.rssi);
+            printf("RSSI: %d dBm\n", ap_info.rssi);
         }
         vTaskDelay(1000);
     }
@@ -395,9 +375,9 @@ void wifiLinkInit() {
 
     if (tcpLinkInit(&controlLink, 80)) {
         // Create the Rx and Tx task
-        xTaskCreatePinnedToCore(wifiLinkRxTask, "control_link_rx_task", 4096, &controlLink, 6, &controlLink.rxTaskHandle, 1);
-        xTaskCreatePinnedToCore(wifiLinkTxTask, "control_link_tx_task", 4096, &controlLink, 6, &controlLink.txTaskHandle, 1);
-        // xTaskCreatePinnedToCore(wifiRSSITask, "wifi_rssi_task", 4096, NULL, 5, NULL, 1);
+        xTaskCreatePinnedToCore(wifiLinkRxTask, "wifi_control_link_rx_task", 4096, &controlLink, 5, &controlLink.rxTaskHandle, 1);
+        xTaskCreatePinnedToCore(wifiLinkTxTask, "wifi_control_link_tx_task", 4096, &controlLink, 6, &controlLink.txTaskHandle, 1);
+        // xTaskCreatePinnedToCore(wifiRSSITask, "wifi_rssi_task", 4096, NULL, 10, NULL, 1);
     } else {
         printf("Create Control TCP [FAILED]\n");
     }
