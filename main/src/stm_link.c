@@ -3,21 +3,25 @@
 #include "podtp.h"
 #include "link.h"
 #include "driver/gpio.h"
+#include <string.h>
 
 static StmLink stmLink;
+
+static void uartSendPacket(PodtpPacket *packet);
 
 #define UART_RX_BUFFER_LENGTH 512
 bool stmLinkUartParsePacket(uint8_t byte);
 void stmLinkRxTask(void *pvParameters) {
+    StmLink *self = (StmLink *)pvParameters;
     size_t length;
     uint8_t buffer[UART_RX_BUFFER_LENGTH];
     while (true) {
-        uart_get_buffered_data_len(stmLink.uartPort, &length);
+        uart_get_buffered_data_len(self->uartPort, &length);
         if (length > 0) {
-            int len = uart_read_bytes(stmLink.uartPort, buffer, UART_RX_BUFFER_LENGTH, 1);
+            int len = uart_read_bytes(self->uartPort, buffer, UART_RX_BUFFER_LENGTH, 1);
             for (int i = 0; i < len; i++) {
                 if (stmLinkUartParsePacket(buffer[i])) {
-                    linkProcessPacket(&stmLink.packetBufferRx);
+                    linkProcessPacket(&self->rxPacket);
                 }
             }
         }
@@ -25,10 +29,24 @@ void stmLinkRxTask(void *pvParameters) {
     }
 }
 
+void stmLinkTxTask(void *pvParameters) {
+    StmLink *self = (StmLink *)pvParameters;
+    PodtpPacket packet;
+
+    while (true) {
+        if (xQueueReceive(self->txQueue, &packet, portMAX_DELAY) == pdTRUE) {
+            if (packet.length > PODTP_MAX_DATA_LEN) {
+                printf("Error: Packet length exceeds maximum allowed size\n");
+            } else {
+                uartSendPacket(&packet);
+            }
+        }
+    }
+}
+
 void stmLinkInit() {
     stmLink.ackQueue = xQueueCreate(3, sizeof(PodtpPacket));
     stmLink.waitForAck = false;
-    stmLink.rxTaskHandle = NULL;
     uart_config_t uart_config = {
         .baud_rate = 1000000,
         .data_bits = UART_DATA_8_BITS,
@@ -41,10 +59,17 @@ void stmLinkInit() {
     uart_driver_install(UART_NUM_0, UART_RX_BUFFER_LENGTH, 0, 0, NULL, 0);
     uart_set_pin(UART_NUM_0, STM_TX_PIN, STM_RX_PIN, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE);
     stmLink.uartPort = UART_NUM_0;
-    xTaskCreatePinnedToCore(stmLinkRxTask, "stmLinkRxTask", 4096, NULL, 7, &stmLink.rxTaskHandle, 1);
+
+    stmLink.txQueue = xQueueCreate(10, sizeof(PodtpPacket));
+    xTaskCreatePinnedToCore(stmLinkRxTask, "stmLinkRxTask", 4096, &stmLink, 7, &stmLink.rxTaskHandle, 1);
+    xTaskCreatePinnedToCore(stmLinkTxTask, "stmLinkTxTask", 4096, &stmLink, 7, &stmLink.txTaskHandle, 1);
 }
 
 void stmLinkSendPacket(PodtpPacket *packet) {
+    xQueueSend(stmLink.txQueue, packet, 0);
+}
+
+void uartSendPacket(PodtpPacket *packet) {
     static uint8_t buffer[2 + 1 + 1 + PODTP_MAX_DATA_LEN + 2 + 5] = { PODTP_START_BYTE_1, PODTP_START_BYTE_2, 0 };
     uint8_t check_sum[2] = { 0 };
     check_sum[0] = check_sum[1] = packet->length;
@@ -72,21 +97,25 @@ bool stmLinkAckQueuePut(PodtpPacket *packet) {
 }
 
 bool stmLinkSendReliablePacket(PodtpPacket *packet, int retry) {
-    stmLink.packetBufferTx = *packet;
-    packet->type = PODTP_TYPE_ACK;
-    packet->length = 1;
+    bool success = false;
+    PodtpPacket ackPacket;
     stmLink.waitForAck = true;
+
     for (int i = 0; i < retry; i++) {
         // printf("SR [%d]: p=%d, l=%d\n", i, packet->port, packet->length);
-        stmLinkSendPacket(&stmLink.packetBufferTx);
-        xQueueReceive(stmLink.ackQueue, packet, 1000);
-        if (packet->port == PORT_ACK_OK) {
-            stmLink.waitForAck = false;
-            return true;
+        stmLinkSendPacket(packet);
+        xQueueReceive(stmLink.ackQueue, &ackPacket, 1000);
+        if (ackPacket.port == PORT_ACK_OK) {
+            success = true;
+            break;
         }
     }
+
     stmLink.waitForAck = false;
-    return false;
+    packet->type = PODTP_TYPE_ACK;
+    packet->port = success ? PORT_ACK_OK : PORT_ACK_ERROR;
+    packet->length = 1;
+    return success;
 }
 
 typedef enum {
@@ -117,16 +146,16 @@ bool stmLinkUartParsePacket(uint8_t byte) {
             if (length > PODTP_MAX_DATA_LEN || length == 0) {
                 state = PODTP_STATE_START_1;
             } else {
-                stmLink.packetBufferRx.length = 0;
+                stmLink.rxPacket.length = 0;
                 check_sum[0] = check_sum[1] = length;
                 state = PODTP_STATE_RAW_DATA;
             }
             break;
         case PODTP_STATE_RAW_DATA:
-            stmLink.packetBufferRx.raw[stmLink.packetBufferRx.length++] = byte;
+            stmLink.rxPacket.raw[stmLink.rxPacket.length++] = byte;
             check_sum[0] += byte;
             check_sum[1] += check_sum[0];
-            if (stmLink.packetBufferRx.length == length) {
+            if (stmLink.rxPacket.length == length) {
                 state = PODTP_STATE_CHECK_SUM_1;
             }
             break;

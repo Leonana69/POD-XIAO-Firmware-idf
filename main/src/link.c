@@ -32,7 +32,7 @@ void linkProcessPacket(PodtpPacket *packet) {
         case PODTP_TYPE_ESP32:
             // packets for ESP32 are not sent to STM32
             if (packet->port == PORT_ESP32_ECHO) {
-                printf("ECHO: (%d, %d)\n", packet->port, packet->length);
+                printf("ECHO: (%d, %d, %d)\n", packet->type, packet->port, packet->length);
                 wifiLinkSendPacket(packet);
             } else if (packet->port == PORT_ESP32_START_STM32_BOOTLOADER) {
                 if (packet->data[0] == 1) {

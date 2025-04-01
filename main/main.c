@@ -21,11 +21,11 @@ void app_main(void) {
     printf("System Starting...\n");
     bootInit();
     buttonInit();
+    stmLinkInit();
     wifiInit(-1);
     wifiLinkInit();
-    stmLinkInit();
     cameraInit();
-    dw1000_init();
+    // dw1000_init();
     
 	bootSTM32Firmware();
 }

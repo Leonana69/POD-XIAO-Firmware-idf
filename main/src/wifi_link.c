@@ -12,33 +12,6 @@ static WifiLink controlLink;
 static WifiLink streamLink;
 static bool wifiConnected = false;
 
-// Initialize the PacketBuffer
-void PacketBufferInit(PacketBuffer* buffer) {
-    buffer->head = 0;
-    buffer->tail = 0;
-}
-
-// Push a packet into the PacketBuffer
-void PacketBufferPush(PacketBuffer* buffer, PodtpPacket *packet) {
-    buffer->raw[buffer->head] = *packet;
-    buffer->head = (buffer->head + 1) % MAX_PACKETS;
-}
-
-// Pop a packet from the PacketBuffer
-PodtpPacket* PacketBufferPop(PacketBuffer* buffer) {
-    if (buffer->head == buffer->tail) {
-        return NULL;
-    }
-    PodtpPacket* packet = &buffer->raw[buffer->tail];
-    buffer->tail = (buffer->tail + 1) % MAX_PACKETS;
-    return packet;
-}
-
-// Check if the PacketBuffer is empty
-bool PacketBufferEmpty(PacketBuffer* buffer) {
-    return buffer->head == buffer->tail;
-}
-
 wifi_config_t wifiConfigs[3] = {
     {
         .sta = {
@@ -211,13 +184,13 @@ static bool wifiParsePacket(uint8_t byte) {
             if (length > PODTP_MAX_DATA_LEN || length == 0) {
                 state = PODTP_STATE_START_1;
             } else {
-                controlLink.rx_packet.length = 0;
+                controlLink.rxPacket.length = 0;
                 state = PODTP_STATE_RAW_DATA;
             }
             break;
         case PODTP_STATE_RAW_DATA:
-            controlLink.rx_packet.raw[controlLink.rx_packet.length++] = byte;
-            if (controlLink.rx_packet.length >= length) {
+            controlLink.rxPacket.raw[controlLink.rxPacket.length++] = byte;
+            if (controlLink.rxPacket.length >= length) {
                 state = PODTP_STATE_START_1;
                 return true;
             }
@@ -230,46 +203,58 @@ static bool wifiParsePacket(uint8_t byte) {
     return false;
 }
 
-static void wifiLinkSendData(WifiLink *self, uint8_t *data, uint32_t length) {
-    if (!self->enabled) {
-        return;
-    }
-    send(self->client_socket, data, length, 0);
-}
-
 void wifiLinkSendPacket(PodtpPacket *packet) {
-    PacketBufferPush(&controlLink.tx_buffer, packet);
+    xQueueSend(controlLink.txQueue, packet, 0);
 }
 
 void wifiLinkTxTask(void* pvParameters) {
-    static uint8_t buffer[PODTP_MAX_DATA_LEN + 4]; // Reserve space for start bytes, length, and data
+    static uint8_t buffer[PODTP_MAX_DATA_LEN + 8]; // Reserve space for start bytes, length, and data
     WifiLink *self = (WifiLink *)pvParameters;
-    
+    PodtpPacket *packet = (PodtpPacket *) &buffer[2]; // Adjust pointer to avoid overwriting start bytes
+
     while (true) {
-        if (!PacketBufferEmpty(&self->tx_buffer)) {
-            PodtpPacket *packet = PacketBufferPop(&self->tx_buffer);
-            
+        if (xQueueReceive(self->txQueue, packet, portMAX_DELAY) == pdTRUE) {
             // Construct the packet directly in the buffer
             buffer[0] = PODTP_START_BYTE_1;
             buffer[1] = PODTP_START_BYTE_2;
-            buffer[2] = packet->length;
-            
-            // Copy the packet data directly into the buffer
-            memcpy(&buffer[3], packet->raw, packet->length);
-            
+
             // Send the entire buffer
-            wifiLinkSendData(self, buffer, packet->length + 3);
+            if (self->enabled && send(self->clientSocket, buffer, packet->length + 3, 0) < 0) {
+                printf("Error: Failed to send packet\n");
+            }
         }
-        vTaskDelay(1);
     }
 }
 
+// void wifiLinkTxTask(void* pvParameters) {
+//     static uint8_t buffer[PODTP_MAX_DATA_LEN + 8]; // Reserve space for start bytes, length, and data
+//     WifiLink *self = (WifiLink *)pvParameters;
+//     PodtpPacket packet; // Separate variable to hold the received packet
+
+//     while (true) {
+//         if (xQueueReceive(self->txQueue, &packet, portMAX_DELAY) == pdTRUE) {
+//             // Construct the packet in the buffer
+//             buffer[0] = PODTP_START_BYTE_1;
+//             buffer[1] = PODTP_START_BYTE_2;
+//             buffer[2] = packet.length;
+            
+//             // Copy the packet data into the buffer
+//             memcpy(&buffer[3], packet.raw, packet.length);
+
+//             // Send the entire buffer
+//             if (self->enabled && send(self->clientSocket, buffer, packet.length + 3, 0) < 0) {
+//                 printf("Error: Failed to send packet\n");
+//             }
+//         }
+//     }
+// }
+
 void wifiLinkEnableStream(bool enable) {
     streamLink.enabled = enable;
-    streamLink.client_addr.sin_addr.s_addr = controlLink.client_addr.sin_addr.s_addr;
+    streamLink.clientAddr.sin_addr.s_addr = controlLink.clientAddr.sin_addr.s_addr;
 }
 
-static uint16_t count = 0;
+static uint16_t image_count = 0;
 #define IMAGE_PACKET_SIZE 1024
 #define IMAGE_HEADER_SIZE 8
 #define IMAGE_PAYLOAD_SIZE (IMAGE_PACKET_SIZE - IMAGE_HEADER_SIZE)
@@ -287,8 +272,6 @@ typedef struct {
     uint8_t data[IMAGE_PAYLOAD_SIZE];
 } ImagePacket;
 
-static ImagePacket image_packet;
-
 void wifiLinkSendImage(uint8_t *data, uint32_t length) {
     if (!streamLink.enabled) {
         return;
@@ -296,15 +279,22 @@ void wifiLinkSendImage(uint8_t *data, uint32_t length) {
 
     int packet_count = (length + IMAGE_PAYLOAD_SIZE - 1) / IMAGE_PAYLOAD_SIZE;
     for (int i = 0; i < packet_count; i++) {
-        image_packet.seq = count;
+        ImagePacket image_packet;
+        image_packet.seq = image_count;
         image_packet.index = i;
         image_packet.total = packet_count;
-        image_packet.size = (i == packet_count - 1) ? length % IMAGE_PAYLOAD_SIZE : IMAGE_PAYLOAD_SIZE;
+        image_packet.size = (i == packet_count - 1) ? 
+                            ((length % IMAGE_PAYLOAD_SIZE == 0) ? IMAGE_PAYLOAD_SIZE : length % IMAGE_PAYLOAD_SIZE) 
+                            : IMAGE_PAYLOAD_SIZE;
         memcpy(image_packet.data, data + i * IMAGE_PAYLOAD_SIZE, image_packet.size);
-        sendto(streamLink.socket, (const char *)&image_packet, image_packet.size + IMAGE_HEADER_SIZE, 0, (struct sockaddr *)&streamLink.client_addr, streamLink.client_addr_len);
+        ssize_t sent = sendto(streamLink.socket, (const char *)&image_packet, image_packet.size + IMAGE_HEADER_SIZE, 0, (struct sockaddr *)&streamLink.clientAddr, streamLink.clientAddrLen);
+        if (sent < 0) {
+            printf("Error: Failed to send image packet\n");
+            break;
+        }
     }
 
-    count += 1;
+    image_count += 1;
 }
 
 void wifiLinkRxTask(void* pvParameters) {
@@ -312,34 +302,33 @@ void wifiLinkRxTask(void* pvParameters) {
     char rx_buffer[128];
 
     while (true) {
-        int client_sock = accept(self->socket, (struct sockaddr *)&(self->client_addr), &(self->client_addr_len));
+        int client_sock = accept(self->socket, (struct sockaddr *)&(self->clientAddr), &(self->clientAddrLen));
         if (client_sock < 0) {
             printf("Accept failed\n");
             continue;
         }
         self->enabled = true;
-        self->client_socket = client_sock;
+        self->clientSocket = client_sock;
 
         while (self->enabled) {
             int len = recv(client_sock, rx_buffer, sizeof(rx_buffer) - 1, 0);
 
-            if (len < 0) {
-                printf("Receive failed\n");
-                self->enabled = false;
-                break;
-            } else if (len == 0) {
+            if (len <= 0) {
                 printf("Connection closed\n");
                 self->enabled = false;
                 break;
             } else {
                 for (int i = 0; i < len; i++) {
                     if (wifiParsePacket(rx_buffer[i])) {
-                        linkProcessPacket(&self->rx_packet);
+                        linkProcessPacket(&self->rxPacket);
                     }
                 }
             }
         }
-        close(client_sock);
+
+        if (close(client_sock) < 0) {
+            printf("Error: Failed to close client socket\n");
+        }
     }
 }
 
@@ -363,7 +352,7 @@ bool tcpLinkInit(WifiLink *self, uint16_t port) {
         return false;
     }
 
-    self->client_addr_len = sizeof(self->client_addr);
+    self->clientAddrLen = sizeof(self->clientAddr);
     // Listen for incoming connections
     if (listen(self->socket, 1) < 0) {
         printf("Socket listen failed");
@@ -380,10 +369,10 @@ bool udpLinkInit(WifiLink *self, uint16_t port) {
         return false;
     }
 
-    self->client_addr.sin_family = AF_INET;
-    self->client_addr.sin_addr.s_addr = htonl(INADDR_ANY);
-    self->client_addr.sin_port = htons(port);
-    self->client_addr_len = sizeof(self->client_addr);
+    self->clientAddr.sin_family = AF_INET;
+    self->clientAddr.sin_addr.s_addr = htonl(INADDR_ANY);
+    self->clientAddr.sin_port = htons(port);
+    self->clientAddrLen = sizeof(self->clientAddr);
     return true;
 }
 
@@ -402,10 +391,12 @@ void wifiLinkInit() {
     if (!wifiConnected)
         return;
 
+    controlLink.txQueue = xQueueCreate(10, sizeof(PodtpPacket));
+
     if (tcpLinkInit(&controlLink, 80)) {
         // Create the Rx and Tx task
-        xTaskCreatePinnedToCore(wifiLinkRxTask, "control_link_rx_task", 4096, &controlLink, 6, &controlLink.rx_task_handle, 1);
-        xTaskCreatePinnedToCore(wifiLinkTxTask, "control_link_tx_task", 4096, &controlLink, 6, &controlLink.tx_task_handle, 1);
+        xTaskCreatePinnedToCore(wifiLinkRxTask, "control_link_rx_task", 4096, &controlLink, 6, &controlLink.rxTaskHandle, 1);
+        xTaskCreatePinnedToCore(wifiLinkTxTask, "control_link_tx_task", 4096, &controlLink, 6, &controlLink.txTaskHandle, 1);
         // xTaskCreatePinnedToCore(wifiRSSITask, "wifi_rssi_task", 4096, NULL, 5, NULL, 1);
     } else {
         printf("Create Control TCP [FAILED]\n");

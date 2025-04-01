@@ -6,35 +6,19 @@
 #include <stddef.h>
 #include <stdint.h>
 #include "freertos/FreeRTOS.h"
+#include "freertos/queue.h"
 #include "sys/socket.h"
-
-#define MAX_PACKETS 50
-
-typedef struct {
-    PodtpPacket raw[MAX_PACKETS];
-    uint8_t head;
-    uint8_t tail;
-} PacketBuffer;
-
-// Initialize the PacketBuffer
-void PacketBufferInit(PacketBuffer* buffer);
-// Push a packet into the PacketBuffer
-void PacketBufferPush(PacketBuffer* buffer, PodtpPacket *packet);
-// Pop a packet from the PacketBuffer
-PodtpPacket* PacketBufferPop(PacketBuffer* buffer);
-// Check if the PacketBuffer is empty
-bool PacketBufferEmpty(PacketBuffer* buffer);
 
 typedef struct {
     int socket;
-    int client_socket;
-    struct sockaddr_in client_addr;
-    socklen_t client_addr_len;
+    int clientSocket;
+    struct sockaddr_in clientAddr;
+    socklen_t clientAddrLen;
     bool enabled;
-    TaskHandle_t rx_task_handle;
-    TaskHandle_t tx_task_handle;
-    PacketBuffer tx_buffer;
-    PodtpPacket rx_packet;
+    TaskHandle_t rxTaskHandle;
+    TaskHandle_t txTaskHandle;
+    QueueHandle_t txQueue;
+    PodtpPacket rxPacket;
     // Add other members as needed
 } WifiLink;
 

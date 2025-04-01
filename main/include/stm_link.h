@@ -10,8 +10,9 @@
 typedef struct {
     QueueHandle_t ackQueue;
     TaskHandle_t rxTaskHandle;
-    PodtpPacket packetBufferRx;
-    PodtpPacket packetBufferTx;
+    TaskHandle_t txTaskHandle;
+    QueueHandle_t txQueue;
+    PodtpPacket rxPacket;
     bool waitForAck;
     uart_port_t uartPort;
 } StmLink;
