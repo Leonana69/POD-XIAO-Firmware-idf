@@ -7,8 +7,6 @@
 
 static StmLink stmLink;
 
-static void uartSendPacket(PodtpPacket *packet);
-
 #define UART_RX_BUFFER_LENGTH 512
 bool stmLinkUartParsePacket(uint8_t byte);
 void stmLinkRxTask(void *pvParameters) {
@@ -31,14 +29,26 @@ void stmLinkRxTask(void *pvParameters) {
 
 void stmLinkTxTask(void *pvParameters) {
     StmLink *self = (StmLink *)pvParameters;
-    PodtpPacket packet;
+    static uint8_t buffer[2 + 1 + 1 + PODTP_MAX_DATA_LEN + 2 + 5] = { PODTP_START_BYTE_1, PODTP_START_BYTE_2, 0 };
+    PodtpPacket *packet = (PodtpPacket *) &buffer[2];
+    uint8_t check_sum[2] = { 0 };
 
     while (true) {
-        if (xQueueReceive(self->txQueue, &packet, portMAX_DELAY) == pdTRUE) {
-            if (packet.length > PODTP_MAX_DATA_LEN) {
+        if (xQueueReceive(self->txQueue, packet, portMAX_DELAY) == pdTRUE) {
+            if (packet->length > PODTP_MAX_DATA_LEN) {
                 printf("Error: Packet length exceeds maximum allowed size\n");
             } else {
-                uartSendPacket(&packet);
+                // uartSendPacket(&packet);
+                check_sum[0] = check_sum[1] = packet->length;
+                for (uint8_t i = 0; i < packet->length; i++) {
+                    check_sum[0] += packet->raw[i];
+                    check_sum[1] += check_sum[0];
+                }
+                buffer[packet->length + 3] = check_sum[0];
+                buffer[packet->length + 4] = check_sum[1];
+                // add tail to reset the state machine
+                *(uint32_t *) &buffer[packet->length + 5] = 0x0A0D0A0D;
+                uart_write_bytes(self->uartPort, (const char *)buffer, packet->length + 10);
             }
         }
     }
@@ -67,24 +77,6 @@ void stmLinkInit() {
 
 void stmLinkSendPacket(PodtpPacket *packet) {
     xQueueSend(stmLink.txQueue, packet, 0);
-}
-
-void uartSendPacket(PodtpPacket *packet) {
-    static uint8_t buffer[2 + 1 + 1 + PODTP_MAX_DATA_LEN + 2 + 5] = { PODTP_START_BYTE_1, PODTP_START_BYTE_2, 0 };
-    uint8_t check_sum[2] = { 0 };
-    check_sum[0] = check_sum[1] = packet->length;
-    buffer[2] = packet->length;
-    for (uint8_t i = 0; i < packet->length; i++) {
-        check_sum[0] += packet->raw[i];
-        check_sum[1] += check_sum[0];
-        buffer[i + 3] = packet->raw[i];
-    }
-    buffer[packet->length + 3] = check_sum[0];
-    buffer[packet->length + 4] = check_sum[1];
-    // add tail to reset the state machine
-    *(uint32_t *) &buffer[packet->length + 5] = 0x0A0D0A0D;
-    buffer[packet->length + 9] = 0x0A;
-    uart_write_bytes(stmLink.uartPort, (const char *)buffer, packet->length + 10);
 }
 
 bool stmLinkAckQueuePut(PodtpPacket *packet) {
